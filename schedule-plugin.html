@@ -359,8 +359,20 @@
     // ═══════════════ 数据源：飞书多维表格 ═══════════════
     const T = { sched: null, photo: null, weekly: null };
     const F = { sched: {}, photo: {}, weekly: {} }; // 字段名 → fieldId
-    const sel1 = v => (Array.isArray(v) ? (v[0] ?? '') : (v ?? ''));
-    const asText = v => (typeof v === 'string' ? v : (v && typeof v === 'object' ? (v.text ?? '') : (v ?? '')));
+    const sel1 = v => {
+      if (v == null) return '';
+      if (typeof v === 'string') return v;
+      if (Array.isArray(v)) return sel1(v[0]);
+      if (typeof v === 'object') return v.name ?? v.text ?? v.value ?? '';
+      return String(v);
+    };
+    const asText = v => {
+      if (v == null) return '';
+      if (typeof v === 'string') return v;
+      if (Array.isArray(v)) return v.map(asText).join('');
+      if (typeof v === 'object') return v.text ?? v.name ?? v.value ?? '';
+      return String(v);
+    };
     const cell = (rec, fmap, name) => rec.fields?.[fmap[name]] ?? rec.fields?.[name];
 
     async function initTables() {
@@ -421,12 +433,17 @@
       await initTables();
       const [photoRecs, schedRecs, weeklyRecs] = await Promise.all([readAll(T.photo), readAll(T.sched), readAll(T.weekly)]);
       console.log('[档期插件] 步骤3: 记录读取完成 摄影师', photoRecs.length, '条 / 档期', schedRecs.length, '条 / 周汇总', weeklyRecs.length, '条');
+      if (photoRecs.length) {
+        const first = photoRecs[0];
+        const fid = F.photo['摄影师'];
+        console.log('[档期插件] 值形状调试: 摄影师字段原始值 =', JSON.stringify(first.fields?.[fid] ?? first.fields?.['摄影师'])?.slice(0, 120));
+      }
 
       const photographers = photoRecs.map(r => ({
         id: r.recordId,
         name: asText(cell(r, F.photo, '摄影师')) || '未命名',
         specialty: asText(cell(r, F.photo, '擅长方向')) || '',
-        onDuty: cell(r, F.photo, '本周上岗') === true
+        onDuty: cell(r, F.photo, '本周上岗') === true || cell(r, F.photo, '本周上岗') === 1 || cell(r, F.photo, '本周上岗') === 'true'
       })).filter(p => p.name && p.name !== '未命名');
 
       const monday = mondayOf(new Date());
@@ -450,7 +467,7 @@
         slots[`${p.id}|${sk}`] = {
           recordId: r.recordId,
           host: asText(cell(r, F.sched, '预约主播')),
-          leave: cell(r, F.sched, '请假') === true,
+          leave: cell(r, F.sched, '请假') === true || cell(r, F.sched, '请假') === 1 || cell(r, F.sched, '请假') === 'true',
           ts: (cell(r, F.sched, '日期') ?? 0)
         };
       });
