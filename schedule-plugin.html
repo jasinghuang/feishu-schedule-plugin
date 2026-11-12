@@ -849,6 +849,49 @@
       if (state.mode === 'bitable') { await writeCell(T.photo, F.photo, pid, '摄影师', p.name); await refreshQuiet(); }
       else saveLocal();
     }
+    // ── 坑位自动对齐：轮休者的本周坑位自动转给缺坑位的上岗者（其上预约随之取消）──
+    async function reconcileSlots() {
+      if (state.mode !== 'bitable' || !state.photographers?.length) return 0;
+      try {
+        const schedRecs = await readAll(T.sched);
+        const perPhoto = {};
+        const restingSlots = [];
+        schedRecs.forEach(r => {
+          if (sel1(cell(r, F.sched, '周次')) !== state.weekLabel) return;
+          const pn = sel1(cell(r, F.sched, '摄影师'));
+          const p = state.photographers.find(x => x.name === pn);
+          if (!p) return;
+          if (p.onDuty) perPhoto[p.id] = (perPhoto[p.id] || 0) + 1;
+          else restingSlots.push({ rid: r.recordId, host: asText(cell(r, F.sched, '预约主播')) });
+        });
+        const needers = state.activeIds.filter(pid => (perPhoto[pid] || 0) < 10);
+        if (!restingSlots.length || !needers.length) return 0;
+        let moved = 0, canceled = 0, ni = 0;
+        for (const slot of restingSlots) {
+          while (ni < needers.length && (perPhoto[needers[ni]] || 0) >= 10) ni++;
+          if (ni >= needers.length) break;
+          const pid = needers[ni];
+          const p = getPhotographerById(pid);
+          const fields = { [F.sched['摄影师']]: p.name };
+          if (F.sched['摄影师行']) fields[F.sched['摄影师行']] = [{ id: pid }];
+          if (slot.host) { fields[F.sched['预约主播']] = ''; canceled++; }
+          await T.sched.setRecord(slot.rid, { fields });
+          perPhoto[pid] = (perPhoto[pid] || 0) + 1;
+          moved++;
+        }
+        if (moved) {
+          console.log('[档期插件] 坑位对齐: 转移', moved, '个, 取消预约', canceled);
+          showToast(`已自动把 ${moved} 个坑位转给上岗摄影师${canceled ? `（${canceled} 条预约因轮休取消）` : ''}`);
+        }
+        return moved;
+      } catch (e) { console.warn('[档期插件] 坑位对齐失败:', e?.message || e); return 0; }
+    }
+    async function syncAll() {
+      const moved = await reconcileSlots();
+      if (moved > 0) { try { state = await loadBitableState(); } catch (e) { console.warn(e); } }
+      render();
+    }
+
     async function refreshQuiet() {
       try { state = await buildState(); render(); } catch (e) { console.error(e); }
     }
@@ -992,7 +1035,7 @@
     document.getElementById('tabArchive').addEventListener('click', () => { activeTab = 'archive'; render(); });
     document.getElementById('btnExportCurrentCsv').addEventListener('click', exportCurrentWeekCsv);
     document.getElementById('btnReload').addEventListener('click', async () => {
-      showToast('正在刷新…'); try { state = await buildState(); render(); showToast('已同步多维表格最新数据'); } catch (e) {}
+      showToast('正在刷新…'); try { state = await buildState(); await syncAll(); showToast('已同步多维表格最新数据'); } catch (e) {}
     });
     document.getElementById('btnRollover').addEventListener('click', openRolloverModal);
     document.getElementById('btnCloseRollover').addEventListener('click', closeRolloverModal);
@@ -1056,7 +1099,7 @@
           p.onDuty = false; state.activeIds = state.activeIds.filter(id => id !== pid);
         }
         try { await persistRoster(pid); } catch (err) { showToast('写入失败：' + (err?.message || err)); }
-        render();
+        await syncAll();
         return;
       }
     });
@@ -1123,7 +1166,7 @@
     // ═══════════════ 启动 ═══════════════
     try {
       state = await buildState();
-      render();
+      await syncAll();
       if (state.mode === 'bitable') console.log('[档期插件] 已连接多维表格', state.weekLabel);
     } catch (e) {
       document.getElementById('bookingMatrixBody').innerHTML =
