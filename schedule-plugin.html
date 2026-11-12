@@ -338,13 +338,16 @@
     const cell = (rec, fmap, name) => rec.fields?.[fmap[name]] ?? rec.fields?.[name];
 
     async function initTables() {
+      console.log('[档期插件] 步骤1: getTableMetaList…');
       const metas = await bitable.base.getTableMetaList();
+      console.log('[档期插件] 数据表:', metas.map(m => m.name).join('/'));
       const find = n => metas.find(m => m.name === n);
       const ms = find('档期预约'), mp = find('摄影师'), mw = find('周汇总');
       if (!ms || !mp || !mw) throw new Error('缺少数据表：需要「档期预约」「摄影师」「周汇总」三张表');
       T.sched = await bitable.base.getTableById(ms.id);
       T.photo = await bitable.base.getTableById(mp.id);
       T.weekly = await bitable.base.getTableById(mw.id);
+      console.log('[档期插件] 步骤2: 表连接成功');
       for (const [key, t] of [['sched', T.sched], ['photo', T.photo], ['weekly', T.weekly]]) {
         const fm = await t.getFieldMetaList();
         fm.forEach(f => { F[key][f.name] = f.id; });
@@ -479,14 +482,29 @@
     }
 
     async function buildState() {
+      const inIframe = (() => { try { return window.self !== window.top; } catch (e) { return true; } })();
+      console.log('[档期插件] 启动诊断: SDK加载=', !!bitable, 'iframe内=', inIframe, 'referrer=', (document.referrer || '无').slice(0, 60));
       if (bitable) {
+        console.log('[档期插件] 开始连接多维表格（最长等待 20 秒）…');
         try {
-          return await Promise.race([
+          const st = await Promise.race([
             loadBitableState(),
-            new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), 8000))
+            new Promise((_, rej) => setTimeout(() => rej(new Error('连接多维表格超时(20s)：请截图控制台日志反馈')), 20000)
           ]);
+          console.log('[档期插件] 连接成功:', st.weekLabel, '摄影师', st.photographers.length, '位');
+          return st;
         } catch (e) {
-          console.warn('[档期插件] 多维表格桥接不可用，回退本地模式:', e?.message || e);
+          console.error('[档期插件] 桥接失败:', e?.message || e);
+          if (inIframe) {
+            // 在飞书 iframe 里失败 → 明确报错，不悄悄降级
+            const el = document.getElementById('bookingMatrixBody');
+            if (el) el.innerHTML = `<tr><td colspan="12" class="py-8 text-center text-rose-600 text-xs">
+              ❌ 连接多维表格失败：${escapeHtml(e?.message || String(e))}<br/>
+              <span class="text-slate-400">请打开浏览器控制台(F12)截图日志，或点击右上角「刷新数据」重试</span></td></tr>`;
+            document.getElementById('weekDateRange').textContent = '连接多维表格失败，正在显示错误信息';
+            throw e;
+          }
+          console.warn('[档期插件] 非飞书环境，回退本地模式');
           return buildLocalState();
         }
       }
