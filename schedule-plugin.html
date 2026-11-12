@@ -302,6 +302,17 @@
       'https://cdn.jsdelivr.net/npm/@lark-base-open/js-sdk@1.0.2/dist/index.mjs',
       'https://unpkg.com/@lark-base-open/js-sdk@1.0.2/dist/index.mjs'
     ]);
+    // 诊断：探测 dashboard 桥接（仪表盘插件容器），帮助判断打开的容器类型
+    try {
+      const probe = await Promise.race([
+        import('./sdk/index.mjs'),
+        new Promise((_, rej) => setTimeout(() => rej(new Error('skip')), 8000))
+      ]);
+      console.log('[档期插件] SDK导出探测: bitable=', typeof probe?.bitable, 'dashboard=', typeof probe?.dashboard);
+      if (!bitable && probe?.dashboard) {
+        console.warn('[档期插件] 当前容器疑似「仪表盘插件」——请改用 Base →🧩插件→自定义插件 方式打开（边栏容器才支持 bitable 桥接）');
+      }
+    } catch (e) { console.warn('[档期插件] 探测跳过'); }
 
     // ── 通用工具 ──
     const pad = n => String(n).padStart(2, '0');
