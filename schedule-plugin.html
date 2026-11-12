@@ -632,8 +632,8 @@
               class="w-full h-11 rounded-lg border border-dashed border-slate-200 bg-slate-50 text-center text-[11px] text-slate-400 cursor-not-allowed" /></td>`;
           }
           const host = (s.host || '').trim();
-          if (s.leave && !host) {
-            return `<td class="p-1.5 text-center ${br}"><input type="text" disabled value="" placeholder="请假"
+          if (s.leave) {
+            return `<td class="p-1.5 text-center ${br}"><input type="text" disabled value="不可约"
               class="w-full h-11 rounded-lg border border-dashed border-slate-200 bg-slate-50 text-center text-[11px] text-slate-400 cursor-not-allowed" /></td>`;
           }
           if (!host && isFull) {
