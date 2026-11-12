@@ -515,7 +515,7 @@
         try {
           const st = await Promise.race([
             loadBitableState(),
-            new Promise((_, rej) => setTimeout(() => rej(new Error('连接多维表格超时(20s)：请截图控制台日志反馈')), 20000)
+            new Promise((_, rej) => setTimeout(() => rej(new Error('连接多维表格超时(20s)：请截图控制台日志反馈')), 20000))
           ]);
           console.log('[档期插件] 连接成功:', st.weekLabel, '摄影师', st.photographers.length, '位');
           return st;
