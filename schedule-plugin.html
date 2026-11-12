@@ -381,10 +381,11 @@
       console.log('[档期插件] 数据表:', metas.map(m => m.name).join('/'));
       const find = n => metas.find(m => m.name === n);
       const ms = find('档期预约'), mp = find('摄影师'), mw = find('周汇总');
-      if (!ms || !mp || !mw) throw new Error('缺少数据表：需要「档期预约」「摄影师」「周汇总」三张表');
+      if (!ms || !mp) throw new Error('缺少数据表：需要「档期预约」「摄影师」两张表（周汇总可选）');
       T.sched = await bitable.base.getTableById(ms.id);
       T.photo = await bitable.base.getTableById(mp.id);
-      T.weekly = await bitable.base.getTableById(mw.id);
+      T.weekly = mw ? await bitable.base.getTableById(mw.id) : null;
+      if (!T.weekly) console.log('[档期插件] 周汇总表不存在——完成拍摄数将使用摄影师表的「当周完成拍摄(条)」字段');
       console.log('[档期插件] 步骤2: 表连接成功');
       for (const [key, t] of [['sched', T.sched], ['photo', T.photo], ['weekly', T.weekly]]) {
         const fm = await t.getFieldMetaList();
@@ -431,7 +432,7 @@
 
     async function loadBitableState() {
       await initTables();
-      const [photoRecs, schedRecs, weeklyRecs] = await Promise.all([readAll(T.photo), readAll(T.sched), readAll(T.weekly)]);
+      const [photoRecs, schedRecs, weeklyRecs] = await Promise.all([readAll(T.photo), readAll(T.sched), T.weekly ? readAll(T.weekly) : []]);
       console.log('[档期插件] 步骤3: 记录读取完成 摄影师', photoRecs.length, '条 / 档期', schedRecs.length, '条 / 周汇总', weeklyRecs.length, '条');
       if (photoRecs.length) {
         const first = photoRecs[0];
@@ -472,17 +473,21 @@
         };
       });
 
-      // 周汇总（当前周 + 归档）
+      // 完成拍摄数：优先读摄影师表「当周完成拍摄(条)」；若存在周汇总表则用周汇总
       const videos = {};
+      if (F.photo['当周完成拍摄(条)']) {
+        photoRecs.forEach(r => {
+          const c = cell(r, F.photo, '当周完成拍摄(条)');
+          videos[r.recordId] = { rowId: r.recordId, count: typeof c === 'number' ? c : (c == null || c === '' ? '' : Number(c) || 0) };
+        });
+      }
       weeklyRecs.forEach(r => {
         const wk = sel1(cell(r, F.weekly, '周次'));
         const photoName = sel1(cell(r, F.weekly, '摄影师'));
         const p = photographers.find(x => x.name === photoName);
-        if (!p) return;
-        if (wk === weekLabel) {
-          const c = cell(r, F.weekly, '完成视频数');
-          videos[p.id] = { rowId: r.recordId, count: typeof c === 'number' ? c : (c == null || c === '' ? '' : Number(c) || 0) };
-        }
+        if (!p || wk !== weekLabel) return;
+        const c = cell(r, F.weekly, '完成视频数');
+        videos[p.id] = { rowId: r.recordId, count: typeof c === 'number' ? c : (c == null || c === '' ? '' : Number(c) || 0) };
       });
 
       // 历史归档（过去的周）
@@ -505,7 +510,7 @@
           const sk = slotOfCell(sel1(cell(r, F.sched, '星期')), sel1(cell(r, F.sched, '时段')));
           bookings[`${photoName}|${sk}`] = { hostName: host };
         });
-        const wkRows = weeklyRecs.filter(r => sel1(cell(r, F.weekly, '周次')) === wk);
+        const wkRows = T.weekly ? weeklyRecs.filter(r => sel1(cell(r, F.weekly, '周次')) === wk) : [];
         const completedVideos = {}; let archivedAt = '';
         wkRows.forEach(r => {
           const pn = sel1(cell(r, F.weekly, '摄影师'));
@@ -816,16 +821,22 @@
     }
     async function persistVideos(pid) {
       const v = state.videos[pid];
-      if (state.mode === 'bitable') {
-        if (v?.rowId) await writeCell(T.weekly, F.weekly, v.rowId, '完成视频数', v.count === '' ? null : Number(v.count));
+      if (state.mode !== 'bitable') { saveLocal(); return; }
+      const val = (v == null || v.count === '') ? null : Number(v.count);
+      if (F.photo['当周完成拍摄(条)']) {
+        // 新结构：完成拍摄数直接写在摄影师表行上
+        await writeCell(T.photo, F.photo, pid, '当周完成拍摄(条)', val);
+      } else if (T.weekly) {
+        // 兼容旧结构：写周汇总表
+        if (v?.rowId) await writeCell(T.weekly, F.weekly, v.rowId, '完成视频数', val);
         else {
-          const p = getPhotographerById(pid);
-          const fields = { [F.weekly['周次']]: state.weekLabel, [F.weekly['摄影师']]: p.name, [F.weekly['上岗']]: true };
-          if (v && v.count !== '') fields[F.weekly['完成视频数']] = Number(v.count);
+          const pp = getPhotographerById(pid);
+          const fields = { [F.weekly['周次']]: state.weekLabel, [F.weekly['摄影师']]: pp.name, [F.weekly['上岗']]: true };
+          if (val != null) fields[F.weekly['完成视频数']] = val;
           await addRecords(T.weekly, [fields]);
           await refreshQuiet();
         }
-      } else saveLocal();
+      }
     }
     async function persistRoster(pid) {
       const p = getPhotographerById(pid);
@@ -905,15 +916,17 @@
           }
         }
         await addRecords(T.sched, schedFields);
-        await addRecords(T.weekly, nextActive.map(p => ({
+        if (T.weekly) await addRecords(T.weekly, nextActive.map(p => ({
           [F.weekly['周次']]: nextLabel, [F.weekly['摄影师']]: p.name, [F.weekly['上岗']]: true
         })));
 
         // 3. 本周周汇总打归档时间
-        const now = Date.now();
-        for (const pid of state.activeIds) {
-          const v = state.videos[pid];
-          if (v?.rowId) { try { await writeCell(T.weekly, F.weekly, v.rowId, '归档时间', now); } catch (e) {} }
+        if (T.weekly) {
+          const now = Date.now();
+          for (const pid of state.activeIds) {
+            const v = state.videos[pid];
+            if (v?.rowId && T.weekly) { try { await writeCell(T.weekly, F.weekly, v.rowId, '归档时间', now); } catch (e) {} }
+          }
         }
 
         // 4. 更新名单勾选
