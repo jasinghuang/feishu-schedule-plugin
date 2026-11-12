@@ -495,6 +495,8 @@
         const tss = rows.map(r => cell(r, F.sched, '日期')).filter(v => typeof v === 'number');
         const min = tss.length ? new Date(Math.min(...tss)) : null;
         const max = tss.length ? new Date(Math.max(...tss)) : null;
+        // 未来周不进历史归档（只收开始日期早于本周一的周）
+        if (min && min.getTime() >= mondayTs) continue;
         const bookings = {};
         rows.forEach(r => {
           const host = asText(cell(r, F.sched, '预约主播'));
