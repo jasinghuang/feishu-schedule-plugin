@@ -284,9 +284,24 @@
     }));
 
     let bitable = null;
-    try {
-      ({ bitable } = await import('https://unpkg.com/@lark-base-open/js-sdk@1.0.2/dist/index.mjs'));
-    } catch (e) { /* 本地模式 */ }
+    // SDK 加载链：本地自托管(同源,最快) → jsdelivr → unpkg，每个源 15 秒超时，绝不挂起
+    async function importSdk(urls) {
+      for (const url of urls) {
+        try {
+          const mod = await Promise.race([
+            import(url),
+            new Promise((_, rej) => setTimeout(() => rej(new Error('SDK加载超时: ' + url)), 15000))
+          ]);
+          if (mod?.bitable) { console.log('[档期插件] SDK 来源:', url); return mod.bitable; }
+        } catch (e) { console.warn('[档期插件] SDK源失败:', url, e?.message || e); }
+      }
+      return null;
+    }
+    bitable = await importSdk([
+      './sdk/index.mjs',
+      'https://cdn.jsdelivr.net/npm/@lark-base-open/js-sdk@1.0.2/dist/index.mjs',
+      'https://unpkg.com/@lark-base-open/js-sdk@1.0.2/dist/index.mjs'
+    ]);
 
     // ── 通用工具 ──
     const pad = n => String(n).padStart(2, '0');
