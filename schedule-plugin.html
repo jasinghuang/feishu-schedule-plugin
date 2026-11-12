@@ -380,13 +380,14 @@
       }
     }
     async function readAll(table) {
-      let all = [], offset = 0;
+      // SDK 返回 {total, hasMore, records, pageToken}，分页游标为 pageToken
+      let all = [], pageToken;
       for (let guard = 0; guard < 50; guard++) {
-        const page = await table.getRecords({ pageSize: 500, offset });
-        const items = page.items || [];
-        all = all.concat(items);
-        if (!page.total || all.length >= page.total || items.length === 0) break;
-        offset = all.length;
+        const page = await table.getRecords({ pageSize: 200, pageToken });
+        const recs = page.records || [];
+        all = all.concat(recs);
+        if (!page.hasMore || !page.pageToken || recs.length === 0) break;
+        pageToken = page.pageToken;
       }
       return all;
     }
@@ -401,10 +402,12 @@
       }
     }
     async function addRecords(table, fieldsArr) {
+      // SDK: addRecords(recordValueList) 直接收数组；失败则逐条 addRecord
       try {
-        await table.addRecords({ records: fieldsArr.map(fields => ({ fields })) });
+        await table.addRecords(fieldsArr.map(fields => ({ fields })));
       } catch (e) {
-        for (const fields of fieldsArr) { try { await table.addRecord({ fields }); } catch (e2) { throw e2; } }
+        console.warn('[档期插件] 批量写入失败，改逐条:', e?.message || e);
+        for (const fields of fieldsArr) { await table.addRecord({ fields }); }
       }
     }
 
@@ -417,6 +420,7 @@
     async function loadBitableState() {
       await initTables();
       const [photoRecs, schedRecs, weeklyRecs] = await Promise.all([readAll(T.photo), readAll(T.sched), readAll(T.weekly)]);
+      console.log('[档期插件] 步骤3: 记录读取完成 摄影师', photoRecs.length, '条 / 档期', schedRecs.length, '条 / 周汇总', weeklyRecs.length, '条');
 
       const photographers = photoRecs.map(r => ({
         id: r.recordId,
