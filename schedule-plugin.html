@@ -1,0 +1,1053 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>主播 × 摄影师 智能档期预约表</title>
+  <script src="https://cdn.tailwindcss.com/3.4.17"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <style>
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', sans-serif;
+      background-color: #f8fafc;
+      color: #0f172a;
+    }
+    .table-scroll::-webkit-scrollbar { height: 8px; width: 8px; }
+    .table-scroll::-webkit-scrollbar-track { background: #f1f5f9; border-radius: 4px; }
+    .table-scroll::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+    .table-scroll::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+    #dsBanner { display: none; }
+  </style>
+</head>
+<body class="min-h-screen flex flex-col">
+
+  <div id="dsBanner" class="bg-amber-50 border-b border-amber-200 px-4 py-2 text-xs text-amber-800 text-center">
+    ⚠️ 未检测到飞书多维表格环境，当前为本地演示模式（数据存于浏览器）。请从多维表格「插件」中打开以连接真实数据。
+  </div>
+
+  <!-- Top Navigation & Status Bar -->
+  <header class="bg-white border-b border-slate-200 sticky top-0 z-30">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 py-3.5 flex flex-wrap items-center justify-between gap-3">
+      <div class="flex items-center gap-3">
+        <div class="w-9 h-9 rounded-xl bg-indigo-600 text-white flex items-center justify-center font-bold text-lg shadow-sm">
+          摄
+        </div>
+        <div>
+          <div class="flex items-center gap-2 flex-wrap">
+            <h1 class="text-base sm:text-lg font-bold text-slate-900 tracking-tight">主播 × 摄影师 智能档期表</h1>
+            <span id="weekBadge" class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-indigo-50 text-indigo-700 border border-indigo-200">
+              …
+            </span>
+          </div>
+          <p id="weekDateRange" class="text-xs text-slate-500 mt-0.5">正在连接多维表格…</p>
+        </div>
+      </div>
+
+      <!-- Primary Actions -->
+      <div class="flex items-center gap-2 flex-wrap">
+        <div class="flex items-center bg-slate-100 p-1 rounded-lg text-xs font-medium">
+          <button id="tabBooking" class="tab-btn px-3 py-1.5 rounded-md bg-white text-slate-900 shadow-sm transition">
+            预约看板
+          </button>
+          <button id="tabAdmin" class="tab-btn px-3 py-1.5 rounded-md text-slate-600 hover:text-slate-900 transition">
+            摄影师填报与排班
+          </button>
+          <button id="tabArchive" class="tab-btn px-3 py-1.5 rounded-md text-slate-600 hover:text-slate-900 transition">
+            历史归档 <span id="archiveCountBadge" class="ml-1 px-1.5 py-0.2 bg-slate-200 text-slate-700 rounded-full text-[11px]">0</span>
+          </button>
+        </div>
+
+        <button id="btnReload" class="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-medium shadow-sm transition cursor-pointer">
+          刷新数据
+        </button>
+        <button id="btnRollover" class="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-slate-900 hover:bg-slate-800 text-white text-xs font-medium shadow-sm transition cursor-pointer">
+          <span>归档并生成下周</span>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Content -->
+  <main class="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 py-5 space-y-5">
+
+    <!-- VIEW 1: BOOKING MATRIX -->
+    <section id="viewBooking" class="space-y-4">
+      <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+        <div class="overflow-x-auto table-scroll">
+          <table class="w-full border-collapse min-w-[920px]">
+            <thead>
+              <tr class="bg-slate-50 border-b border-slate-200 text-xs font-semibold text-slate-600">
+                <th class="text-left py-3 px-4 w-40 sticky left-0 bg-slate-50 z-10 border-r border-slate-200" rowspan="2">
+                  摄影师
+                </th>
+                <th class="py-2.5 px-2 text-center border-r border-slate-200" colspan="2">
+                  <div class="text-slate-900">周一</div>
+                  <div id="dateMon" class="text-[11px] font-normal text-slate-400"></div>
+                </th>
+                <th class="py-2.5 px-2 text-center border-r border-slate-200" colspan="2">
+                  <div class="text-slate-900">周二</div>
+                  <div id="dateTue" class="text-[11px] font-normal text-slate-400"></div>
+                </th>
+                <th class="py-2.5 px-2 text-center border-r border-slate-200" colspan="2">
+                  <div class="text-slate-900">周三</div>
+                  <div id="dateWed" class="text-[11px] font-normal text-slate-400"></div>
+                </th>
+                <th class="py-2.5 px-2 text-center border-r border-slate-200" colspan="2">
+                  <div class="text-slate-900">周四</div>
+                  <div id="dateThu" class="text-[11px] font-normal text-slate-400"></div>
+                </th>
+                <th class="py-2.5 px-2 text-center border-r border-slate-200" colspan="2">
+                  <div class="text-slate-900">周五</div>
+                  <div id="dateFri" class="text-[11px] font-normal text-slate-400"></div>
+                </th>
+                <th class="py-2.5 px-3 text-center w-36 bg-slate-50" rowspan="2">
+                  <div class="text-slate-900">当周完成拍摄</div>
+                  <div class="text-[11px] font-normal text-slate-400">摄影师填视频条数</div>
+                </th>
+              </tr>
+              <tr class="bg-slate-50/70 border-b border-slate-200 text-[11px] font-medium text-slate-500">
+                <th class="py-1.5 px-1 text-center w-20">上午</th>
+                <th class="py-1.5 px-1 text-center w-20 border-r border-slate-200">下午</th>
+                <th class="py-1.5 px-1 text-center w-20">上午</th>
+                <th class="py-1.5 px-1 text-center w-20 border-r border-slate-200">下午</th>
+                <th class="py-1.5 px-1 text-center w-20">上午</th>
+                <th class="py-1.5 px-1 text-center w-20 border-r border-slate-200">下午</th>
+                <th class="py-1.5 px-1 text-center w-20">上午</th>
+                <th class="py-1.5 px-1 text-center w-20 border-r border-slate-200">下午</th>
+                <th class="py-1.5 px-1 text-center w-20">上午</th>
+                <th class="py-1.5 px-1 text-center w-20 border-r border-slate-200">下午</th>
+              </tr>
+            </thead>
+            <tbody id="bookingMatrixBody" class="divide-y divide-slate-200 text-xs">
+              <tr><td colspan="12" class="py-8 text-center text-slate-400 text-xs">正在从多维表格加载档期数据…</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="bg-slate-50 px-4 py-2.5 border-t border-slate-200 flex flex-wrap items-center justify-between gap-2 text-xs text-slate-500">
+          <div class="flex items-center gap-4 flex-wrap">
+            <span class="inline-flex items-center gap-1.5"><span class="w-3 h-3 rounded bg-emerald-50 border border-emerald-300 inline-block"></span> 可约坑位（直接输入主播名字占坑）</span>
+            <span class="inline-flex items-center gap-1.5"><span class="w-3 h-3 rounded bg-indigo-50 border border-indigo-300 inline-block"></span> 已填名字（清空即可释放档期）</span>
+            <span class="inline-flex items-center gap-1.5"><span class="w-3 h-3 rounded bg-slate-100 border border-dashed border-slate-300 inline-block"></span> 已满2个半天 / 请假</span>
+          </div>
+          <button id="btnExportCurrentCsv" class="text-xs font-medium text-indigo-600 hover:text-indigo-800 px-2.5 py-1 rounded-lg hover:bg-indigo-50 transition cursor-pointer">
+            导出本周 CSV
+          </button>
+        </div>
+      </div>
+
+      <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-4">
+        <div class="flex items-center justify-between mb-3">
+          <h2 class="text-sm font-bold text-slate-900">本周预约明细清单</h2>
+          <span class="text-xs text-slate-400">实时同步多维表格中的主播姓名</span>
+        </div>
+        <div id="bookingDetailList" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-2.5"></div>
+      </div>
+    </section>
+
+    <!-- VIEW 2: ADMIN SCHEDULE SETUP -->
+    <section id="viewAdmin" class="hidden space-y-4">
+      <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-4 space-y-4">
+          <div>
+            <div class="flex items-center justify-between">
+              <h2 class="text-sm font-bold text-slate-900">1. 本周上岗摄影师（5选4）</h2>
+              <span id="selectedCountBadge" class="text-xs font-semibold px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700">已选 0 / 4</span>
+            </div>
+            <p class="text-xs text-slate-500 mt-1">勾选本周开放预约的 4 位摄影师，未勾选的 1 位本周轮休。支持直接修改姓名。</p>
+            <div id="photographerPoolList" class="mt-3 space-y-2"></div>
+          </div>
+        </div>
+
+        <div class="lg:col-span-2 bg-white rounded-xl border border-slate-200 shadow-sm p-4 space-y-3">
+          <div class="flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <h2 class="text-sm font-bold text-slate-900">2. 摄影师不可约时段标记（默认全时段开放）</h2>
+              <p class="text-xs text-slate-500 mt-0.5">默认周一至周五全时段均可被主播预约（每人约满 2 个半天即止）。如摄影师某半天请假，可点击标记为「请假」。</p>
+            </div>
+            <button id="btnAutoFillDemo" class="text-xs font-medium px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 transition cursor-pointer">
+              重置为全时段开放
+            </button>
+          </div>
+
+          <div class="overflow-x-auto table-scroll border border-slate-200 rounded-lg">
+            <table class="w-full border-collapse min-w-[700px] text-xs">
+              <thead>
+                <tr class="bg-slate-50 border-b border-slate-200 text-slate-600 font-semibold">
+                  <th class="text-left py-2.5 px-3 w-40 border-r border-slate-200">摄影师</th>
+                  <th class="py-2 px-1 text-center border-r border-slate-200" colspan="2">周一</th>
+                  <th class="py-2 px-1 text-center border-r border-slate-200" colspan="2">周二</th>
+                  <th class="py-2 px-1 text-center border-r border-slate-200" colspan="2">周三</th>
+                  <th class="py-2 px-1 text-center border-r border-slate-200" colspan="2">周四</th>
+                  <th class="py-2 px-1 text-center" colspan="2">周五</th>
+                </tr>
+                <tr class="bg-slate-50/70 border-b border-slate-200 text-[11px] text-slate-500">
+                  <th class="py-1 px-3 text-left border-r border-slate-200">状态</th>
+                  <th class="py-1 text-center">上午</th><th class="py-1 text-center border-r border-slate-200">下午</th>
+                  <th class="py-1 text-center">上午</th><th class="py-1 text-center border-r border-slate-200">下午</th>
+                  <th class="py-1 text-center">上午</th><th class="py-1 text-center border-r border-slate-200">下午</th>
+                  <th class="py-1 text-center">上午</th><th class="py-1 text-center border-r border-slate-200">下午</th>
+                  <th class="py-1 text-center">上午</th><th class="py-1 text-center">下午</th>
+                </tr>
+              </thead>
+              <tbody id="adminSlotMatrixBody" class="divide-y divide-slate-200"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- VIEW 3: ARCHIVE VAULT -->
+    <section id="viewArchive" class="hidden space-y-4">
+      <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-4">
+        <div class="flex flex-wrap items-center justify-between gap-2 mb-4">
+          <div>
+            <h2 class="text-sm font-bold text-slate-900">历史周档期归档库</h2>
+            <p class="text-xs text-slate-500 mt-0.5">数据直接来自多维表格「档期预约 / 周汇总」，过去各周的排班、预约与完成条数永久可查，支持导出 CSV。</p>
+          </div>
+        </div>
+        <div id="archiveListContainer" class="space-y-3"></div>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- WEEKLY ROLLOVER & ARCHIVE MODAL -->
+  <div id="rolloverModal" class="fixed inset-0 z-50 hidden items-center justify-center bg-slate-900/50 backdrop-blur-xs p-4">
+    <div class="bg-white rounded-2xl shadow-xl border border-slate-200 w-full max-w-md overflow-hidden">
+      <div class="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
+        <div>
+          <h3 class="text-base font-bold text-slate-900">归档本周并生成下周档期</h3>
+          <p class="text-xs text-slate-500 mt-0.5">将写入多维表格：封存本周、轮换摄影师、生成下周 40 个坑位</p>
+        </div>
+        <button id="btnCloseRollover" class="text-slate-400 hover:text-slate-600 p-1 rounded-lg text-lg leading-none cursor-pointer">&times;</button>
+      </div>
+      <div class="p-5 space-y-4 text-xs">
+        <div id="rolloverSummaryBox" class="rounded-xl bg-slate-50 border border-slate-200 p-3.5 space-y-1 text-slate-700"></div>
+
+        <div class="space-y-2">
+          <label class="block font-semibold text-slate-700">下周 5选4 摄影师策略</label>
+          <label class="flex items-start gap-2 p-2.5 rounded-lg border border-slate-200 cursor-pointer hover:bg-slate-50">
+            <input type="radio" name="rolloverStrategy" value="rotate" checked class="mt-0.5 text-indigo-600" />
+            <div>
+              <div class="font-medium text-slate-900">自动轮换休息摄影师（推荐）</div>
+              <div class="text-slate-500">让本周轮休的摄影师上岗，并轮换出 1 位本周摄影师</div>
+            </div>
+          </label>
+          <label class="flex items-start gap-2 p-2.5 rounded-lg border border-slate-200 cursor-pointer hover:bg-slate-50">
+            <input type="radio" name="rolloverStrategy" value="keep" class="mt-0.5 text-indigo-600" />
+            <div>
+              <div class="font-medium text-slate-900">沿用本周 4 位摄影师阵容</div>
+              <div class="text-slate-500">保持相同 4 位摄影师，后续可在「摄影师填报与排班」微调</div>
+            </div>
+          </label>
+        </div>
+      </div>
+      <div class="px-5 py-3.5 bg-slate-50 border-t border-slate-100 flex items-center justify-end gap-2">
+        <button id="btnCancelRollover" class="px-3.5 py-2 rounded-lg text-xs font-medium text-slate-600 hover:bg-slate-200 transition cursor-pointer">
+          暂不归档
+        </button>
+        <button id="btnConfirmRollover" class="px-4 py-2 rounded-lg text-xs font-semibold bg-slate-900 hover:bg-slate-800 text-white shadow-sm transition cursor-pointer">
+          确认归档并开启下周
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- TOAST NOTIFICATION -->
+  <div id="toast" class="fixed bottom-5 right-5 z-50 hidden items-center gap-2 px-4 py-2.5 rounded-xl bg-slate-900 text-white text-xs font-medium shadow-lg transition-all">
+    <span id="toastMsg">操作成功</span>
+  </div>
+
+  <script type="module">
+    // ─────────────────────────────────────────────────────────────
+    // 主播×摄影师 智能档期预约表 · 飞书多维表格插件版
+    // UI 100% 复刻 code_artifact.html，数据层对接多维表格三张表：
+    //   摄影师(名单/上岗) / 档期预约(坑位/预约/请假) / 周汇总(完成视频数/归档时间)
+    // 未在飞书环境中打开时，自动回退为本地演示模式（localStorage）。
+    // ─────────────────────────────────────────────────────────────
+    const DAYS = [
+      { key: 'mon', label: '周一' },
+      { key: 'tue', label: '周二' },
+      { key: 'wed', label: '周三' },
+      { key: 'thu', label: '周四' },
+      { key: 'fri', label: '周五' }
+    ];
+    const PERIODS = [{ key: 'am', label: '上午' }, { key: 'pm', label: '下午' }];
+    const ALL_SLOTS = [];
+    DAYS.forEach(d => PERIODS.forEach(p => ALL_SLOTS.push(`${d.key}_${p.key}`)));
+    const SLOT_NAME = {};
+    DAYS.forEach((d, di) => PERIODS.forEach((p, pi) => {
+      SLOT_NAME[`${d.key}_${p.key}`] = `${d.label} ${p.label}`;
+      SLOT_NAME[`${di}_${pi}`] = `${d.label} ${p.label}`;
+    }));
+
+    let bitable = null;
+    try {
+      ({ bitable } = await import('https://unpkg.com/@lark-base-open/js-sdk@1.0.2/dist/index.mjs'));
+    } catch (e) { /* 本地模式 */ }
+
+    // ── 通用工具 ──
+    const pad = n => String(n).padStart(2, '0');
+    const fmtDate = d => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+    function mondayOf(date) { const x = new Date(date); const day = x.getDay() === 0 ? 7 : x.getDay(); x.setDate(x.getDate() - day + 1); return x; }
+    function isoWeekOfMonday(monday) {
+      const d = new Date(Date.UTC(monday.getFullYear(), monday.getMonth(), monday.getDate()));
+      const day = d.getUTCDay() || 7;
+      d.setUTCDate(d.getUTCDate() + 4 - day);
+      const ys = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
+      const w = Math.ceil((((d - ys) / 86400000) + 1) / 7);
+      return { year: d.getUTCFullYear(), week: w };
+    }
+    function getWeekDates(monday) {
+      return DAYS.map((d, i) => {
+        const dt = new Date(monday); dt.setDate(monday.getDate() + i);
+        return { key: d.key, short: `${pad(dt.getMonth() + 1)}/${pad(dt.getDate())}`, full: fmtDate(dt), ts: dt.getTime() };
+      });
+    }
+    function escapeHtml(str) {
+      return String(str ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+    }
+    function formatSlotName(slotKey) {
+      const [dKey, pKey] = slotKey.split('_');
+      const d = DAYS.find(x => x.key === dKey)?.label || dKey;
+      const p = PERIODS.find(x => x.key === pKey)?.label || pKey;
+      return `${d} ${p}`;
+    }
+    const DAY_INDEX = { '周一': 0, '周二': 1, '周三': 2, '周四': 3, '周五': 4 };
+    const PERIOD_KEY = { '上午': 'am', '下午': 'pm' };
+    const DAY_KEY = ['mon', 'tue', 'wed', 'thu', 'fri'];
+    const slotOfCell = (dayLabel, periodLabel) => `${DAY_KEY[DAY_INDEX[dayLabel]]}_${PERIOD_KEY[periodLabel]}`;
+
+    let toastTimer = null;
+    function showToast(msg) {
+      const toast = document.getElementById('toast');
+      document.getElementById('toastMsg').textContent = msg;
+      toast.classList.remove('hidden'); toast.classList.add('flex');
+      if (toastTimer) clearTimeout(toastTimer);
+      toastTimer = setTimeout(() => { toast.classList.add('hidden'); toast.classList.remove('flex'); }, 2400);
+    }
+
+    // ═══════════════ 数据源：飞书多维表格 ═══════════════
+    const T = { sched: null, photo: null, weekly: null };
+    const F = { sched: {}, photo: {}, weekly: {} }; // 字段名 → fieldId
+    const sel1 = v => (Array.isArray(v) ? (v[0] ?? '') : (v ?? ''));
+    const asText = v => (typeof v === 'string' ? v : (v && typeof v === 'object' ? (v.text ?? '') : (v ?? '')));
+    const cell = (rec, fmap, name) => rec.fields?.[fmap[name]] ?? rec.fields?.[name];
+
+    async function initTables() {
+      const metas = await bitable.base.getTableMetaList();
+      const find = n => metas.find(m => m.name === n);
+      const ms = find('档期预约'), mp = find('摄影师'), mw = find('周汇总');
+      if (!ms || !mp || !mw) throw new Error('缺少数据表：需要「档期预约」「摄影师」「周汇总」三张表');
+      T.sched = await bitable.base.getTableById(ms.id);
+      T.photo = await bitable.base.getTableById(mp.id);
+      T.weekly = await bitable.base.getTableById(mw.id);
+      for (const [key, t] of [['sched', T.sched], ['photo', T.photo], ['weekly', T.weekly]]) {
+        const fm = await t.getFieldMetaList();
+        fm.forEach(f => { F[key][f.name] = f.id; });
+      }
+    }
+    async function readAll(table) {
+      let all = [], offset = 0;
+      for (let guard = 0; guard < 50; guard++) {
+        const page = await table.getRecords({ pageSize: 500, offset });
+        const items = page.items || [];
+        all = all.concat(items);
+        if (!page.total || all.length >= page.total || items.length === 0) break;
+        offset = all.length;
+      }
+      return all;
+    }
+    async function writeCell(table, fmap, recordId, name, value) {
+      try {
+        await table.setRecord(recordId, { fields: { [fmap[name]]: value } });
+      } catch (e) {
+        // 某些版本单选需要数组写法
+        if (Array.isArray(value) === false && typeof value === 'string' && name !== '预约主播' && name !== '摄影师') {
+          await table.setRecord(recordId, { fields: { [fmap[name]]: [value] } });
+        } else { throw e; }
+      }
+    }
+    async function addRecords(table, fieldsArr) {
+      try {
+        await table.addRecords({ records: fieldsArr.map(fields => ({ fields })) });
+      } catch (e) {
+        for (const fields of fieldsArr) { try { await table.addRecord({ fields }); } catch (e2) { throw e2; } }
+      }
+    }
+
+    // ── state 构建 ──
+    let state = null;
+    // state = { photographers:[{id(记录id),name,specialty,onDuty}], activeIds:[],
+    //           weekLabel, monday, slots: {'recId|mon_am': {recordId,host,leave,dayLabel,periodLabel}},
+    //           videos: {photoRecId: {rowId,count}}, archives: [...] }
+
+    async function loadBitableState() {
+      await initTables();
+      const [photoRecs, schedRecs, weeklyRecs] = await Promise.all([readAll(T.photo), readAll(T.sched), readAll(T.weekly)]);
+
+      const photographers = photoRecs.map(r => ({
+        id: r.recordId,
+        name: asText(cell(r, F.photo, '摄影师')) || '未命名',
+        specialty: asText(cell(r, F.photo, '擅长方向')) || '',
+        onDuty: cell(r, F.photo, '本周上岗') === true
+      })).filter(p => p.name && p.name !== '未命名');
+
+      const monday = mondayOf(new Date());
+      const { year, week } = isoWeekOfMonday(monday);
+      const weekLabel = `${year}年第${week}周`;
+      const mondayISO = fmtDate(monday);
+      const mondayTs = monday.getTime();
+      const fridayTs = mondayTs + 4 * 86400000;
+
+      // 当前周坑位
+      const slots = {};
+      schedRecs.forEach(r => {
+        const wk = sel1(cell(r, F.sched, '周次'));
+        if (wk !== weekLabel) return;
+        const photoName = sel1(cell(r, F.sched, '摄影师'));
+        const p = photographers.find(x => x.name === photoName);
+        if (!p) return;
+        const dayLabel = sel1(cell(r, F.sched, '星期'));
+        const periodLabel = sel1(cell(r, F.sched, '时段'));
+        const sk = slotOfCell(dayLabel, periodLabel);
+        slots[`${p.id}|${sk}`] = {
+          recordId: r.recordId,
+          host: asText(cell(r, F.sched, '预约主播')),
+          leave: cell(r, F.sched, '请假') === true,
+          ts: (cell(r, F.sched, '日期') ?? 0)
+        };
+      });
+
+      // 周汇总（当前周 + 归档）
+      const videos = {};
+      weeklyRecs.forEach(r => {
+        const wk = sel1(cell(r, F.weekly, '周次'));
+        const photoName = sel1(cell(r, F.weekly, '摄影师'));
+        const p = photographers.find(x => x.name === photoName);
+        if (!p) return;
+        if (wk === weekLabel) {
+          const c = cell(r, F.weekly, '完成视频数');
+          videos[p.id] = { rowId: r.recordId, count: typeof c === 'number' ? c : (c == null || c === '' ? '' : Number(c) || 0) };
+        }
+      });
+
+      // 历史归档（过去的周）
+      const weekSet = new Set(schedRecs.map(r => sel1(cell(r, F.sched, '周次'))).filter(Boolean));
+      const archives = [];
+      for (const wk of weekSet) {
+        if (wk === weekLabel) continue;
+        const rows = schedRecs.filter(r => sel1(cell(r, F.sched, '周次')) === wk);
+        if (!rows.length) continue;
+        const tss = rows.map(r => cell(r, F.sched, '日期')).filter(v => typeof v === 'number');
+        const min = tss.length ? new Date(Math.min(...tss)) : null;
+        const max = tss.length ? new Date(Math.max(...tss)) : null;
+        const bookings = {};
+        rows.forEach(r => {
+          const host = asText(cell(r, F.sched, '预约主播'));
+          if (!host) return;
+          const photoName = sel1(cell(r, F.sched, '摄影师'));
+          const sk = slotOfCell(sel1(cell(r, F.sched, '星期')), sel1(cell(r, F.sched, '时段')));
+          bookings[`${photoName}|${sk}`] = { hostName: host };
+        });
+        const wkRows = weeklyRecs.filter(r => sel1(cell(r, F.weekly, '周次')) === wk);
+        const completedVideos = {}; let archivedAt = '';
+        wkRows.forEach(r => {
+          const pn = sel1(cell(r, F.weekly, '摄影师'));
+          const c = cell(r, F.weekly, '完成视频数');
+          completedVideos[pn] = typeof c === 'number' ? c : 0;
+          const at = cell(r, F.weekly, '归档时间');
+          if (typeof at === 'number') archivedAt = new Date(at + 8 * 3600000).toISOString().slice(0, 16).replace('T', ' ');
+        });
+        archives.push({
+          weekLabel: wk,
+          dateRange: min && max ? `${fmtDate(min)} 至 ${fmtDate(max)}` : '',
+          archivedAt,
+          completedVideos, bookings,
+          photographerNames: [...new Set(rows.map(r => sel1(cell(r, F.sched, '摄影师'))).filter(Boolean))]
+        });
+      }
+      archives.sort((a, b) => a.weekLabel < b.weekLabel ? 1 : -1);
+
+      return {
+        mode: 'bitable', photographers, activeIds: photographers.filter(p => p.onDuty).map(p => p.id),
+        weekLabel, monday, mondayISO, mondayTs, fridayTs, slots, videos, archives
+      };
+    }
+
+    async function buildState() {
+      if (bitable) {
+        try {
+          return await Promise.race([
+            loadBitableState(),
+            new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), 8000))
+          ]);
+        } catch (e) {
+          console.warn('[档期插件] 多维表格桥接不可用，回退本地模式:', e?.message || e);
+          return buildLocalState();
+        }
+      }
+      return buildLocalState();
+    }
+
+    // ═══════════════ 本地回退模式（与原版一致） ═══════════════
+    const STORAGE_KEY = 'smart_photo_schedule_v2';
+    function getDefaultState() {
+      const monday = mondayOf(new Date());
+      const { year, week } = isoWeekOfMonday(monday);
+      const photoNames = ['王智彦', '黄健清', '陈贵锋', '伍珂', '蔡受多'];
+      const spec = ['棚拍/人像', '外景/Vlog', '美妆/静物', '口播/快剪', '全能机动'];
+      const photographers = photoNames.map((n, i) => ({ id: 'p' + (i + 1), name: n, specialty: spec[i], onDuty: i < 4 }));
+      const st = {
+        mode: 'local', photographers, activeIds: photographers.filter(p => p.onDuty).map(p => p.id),
+        weekLabel: `${year}年第${week}周`, monday, mondayISO: fmtDate(monday),
+        slots: {}, videos: {}, archives: []
+      };
+      photographers.filter(p => p.onDuty).forEach(p => ALL_SLOTS.forEach(sk => {
+        st.slots[`${p.id}|${sk}`] = { recordId: null, host: '', leave: false };
+      }));
+      return st;
+    }
+    function buildLocalState() {
+      document.getElementById('dsBanner').style.display = 'block';
+      try {
+        const raw = localStorage.getItem(STORAGE_KEY);
+        if (raw) { const p = JSON.parse(raw); if (p && p.photographers && p.slots) return p; }
+      } catch (e) {}
+      return getDefaultState();
+    }
+    function saveLocal() {
+      if (state?.mode !== 'local') return;
+      try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch (e) {}
+    }
+
+    // ═══════════════ 渲染（与原版一致，仅数据取值适配） ═══════════════
+    let activeTab = 'booking';
+
+    function getPhotographerById(id) { return state.photographers.find(p => p.id === id); }
+    function slotInfo(pid, sk) { return state.slots[`${pid}|${sk}`]; }
+    function bookedCount(pid) {
+      let n = 0;
+      ALL_SLOTS.forEach(sk => { const s = slotInfo(pid, sk); if (s && s.host && s.host.trim()) n++; });
+      return n;
+    }
+
+    function render() {
+      renderHeader(); renderTabs();
+      if (activeTab === 'booking') renderBookingView();
+      else if (activeTab === 'admin') renderAdminView();
+      else renderArchiveView();
+    }
+
+    function renderHeader() {
+      const dates = getWeekDates(state.monday);
+      document.getElementById('weekBadge').textContent = state.weekLabel + (state.mode === 'local' ? ' · 本地模式' : '');
+      document.getElementById('weekDateRange').textContent =
+        `工作周期：${dates[0].full} 至 ${dates[4].full}（周一至周五全时段可约 · 每位摄影师限约 2 个半天 · ${state.mode === 'bitable' ? '数据实时同步多维表格' : '数据存于本浏览器'}）`;
+      ['dateMon', 'dateTue', 'dateWed', 'dateThu', 'dateFri'].forEach((id, i) => {
+        document.getElementById(id).textContent = dates[i].short;
+      });
+      document.getElementById('archiveCountBadge').textContent = state.archives.length;
+    }
+
+    function renderTabs() {
+      const tabs = [
+        { id: 'tabBooking', view: 'viewBooking', key: 'booking' },
+        { id: 'tabAdmin', view: 'viewAdmin', key: 'admin' },
+        { id: 'tabArchive', view: 'viewArchive', key: 'archive' }
+      ];
+      tabs.forEach(t => {
+        const btn = document.getElementById(t.id), view = document.getElementById(t.view);
+        if (activeTab === t.key) {
+          btn.className = 'tab-btn px-3 py-1.5 rounded-md bg-white text-slate-900 shadow-sm transition cursor-pointer';
+          view.classList.remove('hidden');
+        } else {
+          btn.className = 'tab-btn px-3 py-1.5 rounded-md text-slate-600 hover:text-slate-900 transition cursor-pointer';
+          view.classList.add('hidden');
+        }
+      });
+    }
+
+    function renderBookingView() {
+      const tbody = document.getElementById('bookingMatrixBody');
+      const active = state.activeIds.map(id => getPhotographerById(id)).filter(Boolean);
+      if (!active.length) {
+        tbody.innerHTML = `<tr><td colspan="12" class="py-8 text-center text-slate-400 text-xs">本周暂无上岗摄影师，请到「摄影师填报与排班」勾选。</td></tr>`;
+        return;
+      }
+      tbody.innerHTML = active.map(p => {
+        const isFull = bookedCount(p.id) >= 2;
+        const cellsHtml = ALL_SLOTS.map((sk, idx) => {
+          const s = slotInfo(p.id, sk);
+          const br = idx % 2 === 1 ? 'border-r border-slate-200' : '';
+          if (!s) {
+            return `<td class="p-1.5 text-center ${br}"><input type="text" disabled value="" placeholder="无坑位"
+              class="w-full h-11 rounded-lg border border-dashed border-slate-200 bg-slate-50 text-center text-[11px] text-slate-400 cursor-not-allowed" /></td>`;
+          }
+          const host = (s.host || '').trim();
+          if (s.leave && !host) {
+            return `<td class="p-1.5 text-center ${br}"><input type="text" disabled value="" placeholder="请假"
+              class="w-full h-11 rounded-lg border border-dashed border-slate-200 bg-slate-50 text-center text-[11px] text-slate-400 cursor-not-allowed" /></td>`;
+          }
+          if (!host && isFull) {
+            return `<td class="p-1.5 text-center ${br}"><input type="text" disabled value="" placeholder="已满2档"
+              class="w-full h-11 rounded-lg border border-slate-200 bg-slate-100/90 text-center text-[11px] text-slate-400 cursor-not-allowed" /></td>`;
+          }
+          const inputClass = host
+            ? 'border-indigo-300 bg-indigo-50 text-indigo-900 font-semibold focus:ring-2 focus:ring-indigo-500 focus:bg-white'
+            : 'border-emerald-300 bg-emerald-50/60 text-slate-800 placeholder:text-emerald-600/70 focus:ring-2 focus:ring-emerald-500 focus:bg-white';
+          return `<td class="p-1.5 ${br}"><input type="text" data-slot-input="${p.id}|${sk}" value="${escapeHtml(host)}"
+            placeholder="填主播名" class="w-full h-11 px-1.5 rounded-lg border text-center text-xs transition focus:outline-none ${inputClass}" /></td>`;
+        }).join('');
+        const v = state.videos[p.id];
+        const videoCount = v ? v.count : '';
+        return `
+          <tr class="hover:bg-slate-50/40">
+            <td class="py-2.5 px-4 sticky left-0 bg-white z-10 border-r border-slate-200">
+              <div class="font-bold text-slate-900">${escapeHtml(p.name)}</div>
+              <div class="text-[11px] text-slate-400 mt-0.5">${escapeHtml(p.specialty)}</div>
+            </td>
+            ${cellsHtml}
+            <td class="p-2 text-center bg-slate-50/30">
+              <div class="inline-flex items-center gap-1.5 justify-center">
+                <input type="number" min="0" max="999" data-video-input="${p.id}" value="${escapeHtml(videoCount)}" placeholder="0"
+                  class="w-16 h-10 px-2 rounded-lg border border-slate-300 bg-white text-center text-xs font-semibold text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+                <span class="text-xs text-slate-500">条</span>
+              </div>
+            </td>
+          </tr>`;
+      }).join('');
+      renderBookingDetailList(active);
+    }
+
+    function renderBookingDetailList(active) {
+      const el = document.getElementById('bookingDetailList');
+      const items = [];
+      active.forEach(p => ALL_SLOTS.forEach(sk => {
+        const s = slotInfo(p.id, sk);
+        if (s && s.host && s.host.trim()) items.push({ p, sk, host: s.host.trim() });
+      }));
+      if (!items.length) {
+        el.innerHTML = `<div class="col-span-full text-center py-5 text-xs text-slate-400">暂无预约记录，主播可直接在上方绿色输入框中填入自己的名字。</div>`;
+        return;
+      }
+      el.innerHTML = items.map(({ p, sk, host }) => `
+        <div class="p-3 rounded-xl border border-slate-200 bg-slate-50/60 flex items-center justify-between gap-2">
+          <div class="min-w-0">
+            <div class="flex items-center gap-1.5">
+              <span class="px-2 py-0.5 rounded-full text-[11px] font-semibold bg-indigo-100 text-indigo-800">${escapeHtml(host)}</span>
+              <span class="text-xs font-bold text-slate-800 truncate">${escapeHtml(p.name)}</span>
+            </div>
+            <div class="text-[11px] text-slate-500 mt-1">${formatSlotName(sk)}</div>
+          </div>
+          <button data-clear-slot="${p.id}|${sk}" class="text-[11px] text-slate-400 hover:text-rose-600 px-2 py-1 rounded hover:bg-rose-50 transition cursor-pointer shrink-0">取消</button>
+        </div>`).join('');
+    }
+
+    function renderAdminView() {
+      document.getElementById('selectedCountBadge').textContent = `已选 ${state.activeIds.length} / 4`;
+      document.getElementById('photographerPoolList').innerHTML = state.photographers.map(p => {
+        const checked = state.activeIds.includes(p.id);
+        return `
+          <div class="flex items-center gap-2 p-2 rounded-lg border ${checked ? 'border-indigo-200 bg-indigo-50/40' : 'border-slate-200 bg-slate-50/50'}">
+            <input type="checkbox" data-toggle-photog="${p.id}" ${checked ? 'checked' : ''} class="rounded border-slate-300 text-indigo-600 cursor-pointer" />
+            <input type="text" data-rename-photog="${p.id}" value="${escapeHtml(p.name)}" class="flex-1 text-xs font-medium bg-transparent border-b border-transparent focus:border-indigo-400 focus:outline-none px-1 py-0.5 text-slate-800" />
+            <span class="text-[11px] px-1.5 py-0.5 rounded ${checked ? 'bg-indigo-100 text-indigo-700' : 'bg-slate-200 text-slate-500'}">${checked ? '本周上岗' : '轮休'}</span>
+          </div>`;
+      }).join('');
+
+      document.getElementById('adminSlotMatrixBody').innerHTML = state.photographers.map(p => {
+        const isActive = state.activeIds.includes(p.id);
+        let leaveCnt = 0;
+        const cells = ALL_SLOTS.map((sk, idx) => {
+          const s = slotInfo(p.id, sk);
+          const has = Boolean(s && s.host && s.host.trim());
+          const isLeave = Boolean(s && s.leave); if (isLeave) leaveCnt++;
+          const br = idx % 2 === 1 && idx < ALL_SLOTS.length - 1 ? 'border-r border-slate-200' : '';
+          const disabled = !s ? 'opacity-40 cursor-not-allowed' : 'cursor-pointer';
+          const look = has ? 'bg-indigo-600 text-white border-indigo-600'
+            : (isLeave ? 'bg-slate-100 text-slate-400 border-slate-200 hover:bg-slate-200'
+                       : 'bg-emerald-500 text-white border-emerald-500 hover:bg-emerald-600');
+          return `<td class="p-1 text-center ${br}"><button data-admin-slot="${p.id}|${sk}" ${!s ? 'disabled' : ''}
+            class="w-full h-10 rounded-md text-[11px] font-medium border transition ${disabled} ${look}">
+            ${has ? '已约' : (isLeave ? '请假' : (s ? '开放' : '—'))}</button></td>`;
+        }).join('');
+        return `
+          <tr class="${isActive ? 'bg-white' : 'bg-slate-50/70 opacity-75'}">
+            <td class="py-2 px-3 border-r border-slate-200">
+              <div class="flex items-center gap-1.5">
+                <span class="font-bold text-slate-800">${escapeHtml(p.name)}</span>
+                <span class="text-[10px] px-1.5 py-0.2 rounded ${isActive ? 'bg-indigo-100 text-indigo-700' : 'bg-slate-200 text-slate-500'}">${isActive ? '上岗' : '轮休'}</span>
+              </div>
+              <div class="text-[11px] mt-0.5 text-slate-500">请假 ${leaveCnt} 档</div>
+            </td>
+            ${cells}
+          </tr>`;
+      }).join('');
+    }
+
+    function renderArchiveView() {
+      const container = document.getElementById('archiveListContainer');
+      if (!state.archives.length) {
+        container.innerHTML = `<div class="text-center py-8 text-xs text-slate-400">暂无历史归档记录。</div>`;
+        return;
+      }
+      container.innerHTML = state.archives.map((arc, idx) => {
+        const rows = Object.entries(arc.bookings).map(([k, b]) => {
+          const [photoName, sk] = [k.slice(0, k.lastIndexOf('|')), k.slice(k.lastIndexOf('|') + 1)];
+          return { photoName, slot: formatSlotName(sk), host: b.hostName };
+        });
+        const tableRows = rows.length ? rows.map(r => `
+          <tr class="border-t border-slate-100">
+            <td class="py-2 px-3 font-medium text-slate-800">${escapeHtml(r.photoName)}</td>
+            <td class="py-2 px-3 text-slate-600">${escapeHtml(r.slot)}</td>
+            <td class="py-2 px-3 font-semibold text-indigo-700">${escapeHtml(r.host)}</td>
+          </tr>`).join('')
+          : `<tr><td colspan="3" class="py-3 text-center text-slate-400">该周无预约记录</td></tr>`;
+        const badges = Object.entries(arc.completedVideos).map(([n, c]) =>
+          `<span class="text-[11px] px-2 py-0.5 rounded-full bg-slate-100 text-slate-700 border border-slate-200">${escapeHtml(n)}: <b>${c}</b> 条</span>`).join('');
+        return `
+          <div class="border border-slate-200 rounded-xl overflow-hidden bg-slate-50/40">
+            <div class="px-4 py-3 bg-white border-b border-slate-200 flex flex-wrap items-center justify-between gap-2">
+              <div>
+                <div class="flex items-center gap-2">
+                  <span class="font-bold text-sm text-slate-900">${escapeHtml(arc.weekLabel)}</span>
+                  <span class="text-xs text-slate-500">(${escapeHtml(arc.dateRange)})</span>
+                </div>
+                <div class="text-[11px] text-slate-400 mt-0.5">归档时间：${escapeHtml(arc.archivedAt || '—')}</div>
+                <div class="flex items-center gap-1.5 flex-wrap mt-1.5">
+                  <span class="text-[11px] text-slate-500 font-medium">当周完成视频：</span>${badges}
+                </div>
+              </div>
+              <button data-export-archive="${idx}" class="px-3 py-1.5 rounded-lg bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-xs font-medium transition cursor-pointer">导出该周 CSV</button>
+            </div>
+            <div class="overflow-x-auto">
+              <table class="w-full text-xs text-left">
+                <thead class="bg-slate-50 text-slate-500"><tr>
+                  <th class="py-2 px-3 font-medium">摄影师</th><th class="py-2 px-3 font-medium">档期时间</th><th class="py-2 px-3 font-medium">预约主播</th>
+                </tr></thead>
+                <tbody class="bg-white">${tableRows}</tbody>
+              </table>
+            </div>
+          </div>`;
+      }).join('');
+    }
+
+    // ═══════════════ 写操作 ═══════════════
+    async function persistSlot(pid, sk) {
+      const s = slotInfo(pid, sk); if (!s) return;
+      if (state.mode === 'bitable') await writeCell(T.sched, F.sched, s.recordId, '预约主播', s.host || '');
+      else saveLocal();
+    }
+    async function persistLeave(pid, sk) {
+      const s = slotInfo(pid, sk); if (!s) return;
+      if (state.mode === 'bitable') await writeCell(T.sched, F.sched, s.recordId, '请假', s.leave === true);
+      else saveLocal();
+    }
+    async function persistVideos(pid) {
+      const v = state.videos[pid];
+      if (state.mode === 'bitable') {
+        if (v?.rowId) await writeCell(T.weekly, F.weekly, v.rowId, '完成视频数', v.count === '' ? null : Number(v.count));
+        else {
+          const p = getPhotographerById(pid);
+          const fields = { [F.weekly['周次']]: state.weekLabel, [F.weekly['摄影师']]: p.name, [F.weekly['上岗']]: true };
+          if (v && v.count !== '') fields[F.weekly['完成视频数']] = Number(v.count);
+          await addRecords(T.weekly, [fields]);
+          await refreshQuiet();
+        }
+      } else saveLocal();
+    }
+    async function persistRoster(pid) {
+      const p = getPhotographerById(pid);
+      if (state.mode === 'bitable') await writeCell(T.photo, F.photo, pid, '本周上岗', p.onDuty === true);
+      else saveLocal();
+    }
+    async function persistRename(pid) {
+      const p = getPhotographerById(pid);
+      if (state.mode === 'bitable') { await writeCell(T.photo, F.photo, pid, '摄影师', p.name); await refreshQuiet(); }
+      else saveLocal();
+    }
+    async function refreshQuiet() {
+      try { state = await buildState(); render(); } catch (e) { console.error(e); }
+    }
+
+    // ── 归档并生成下周 ──
+    function openRolloverModal() {
+      let bookedCnt = 0, totalVideos = 0;
+      state.activeIds.forEach(pid => {
+        totalVideos += Number(state.videos[pid]?.count || 0);
+        ALL_SLOTS.forEach(sk => { const s = slotInfo(pid, sk); if (s && s.host && s.host.trim()) bookedCnt++; });
+      });
+      const dates = getWeekDates(state.monday);
+      document.getElementById('rolloverSummaryBox').innerHTML = `
+        <div><span class="font-semibold">即将归档：</span>${state.weekLabel}（${dates[0].full} ~ ${dates[4].full}）</div>
+        <div><span class="font-semibold">本周数据：</span>已预约 ${bookedCnt} 个半天 · 累计完成拍摄 ${totalVideos} 条视频</div>`;
+      const m = document.getElementById('rolloverModal');
+      m.classList.remove('hidden'); m.classList.add('flex');
+    }
+    function closeRolloverModal() {
+      const m = document.getElementById('rolloverModal');
+      m.classList.add('hidden'); m.classList.remove('flex');
+    }
+
+    async function executeRollover() {
+      const btn = document.getElementById('btnConfirmRollover');
+      btn.disabled = true; btn.textContent = '正在写入多维表格…';
+      try {
+        if (state.mode !== 'bitable') {
+          // 本地模式：简单周滚动
+          const nm = new Date(state.monday); nm.setDate(nm.getDate() + 7);
+          const { year, week } = isoWeekOfMonday(nm);
+          state.archives.unshift({ weekLabel: state.weekLabel, dateRange: `${state.mondayISO} 至 ${fmtDate(new Date(state.mondayTs + 4 * 86400000))}`, archivedAt: new Date().toISOString().slice(0, 16).replace('T', ' '), completedVideos: {}, bookings: {} });
+          state.monday = nm; state.mondayISO = fmtDate(nm); state.mondayTs = nm.getTime();
+          state.weekLabel = `${year}年第${week}周`;
+          state.slots = {}; state.videos = {};
+          saveLocal(); render(); showToast(`已生成 ${state.weekLabel} 新档期（本地模式）`);
+          return;
+        }
+        const strategy = document.querySelector('input[name="rolloverStrategy"]:checked')?.value || 'rotate';
+        const nextMonday = new Date(state.monday); nextMonday.setDate(nextMonday.getDate() + 7);
+        const { year, week } = isoWeekOfMonday(nextMonday);
+        const nextLabel = `${year}年第${week}周`;
+
+        // 1. 名单轮换
+        const current = state.photographers.filter(p => state.activeIds.includes(p.id));
+        const resting = state.photographers.filter(p => !state.activeIds.includes(p.id));
+        let nextActive = strategy === 'rotate' && resting.length > 0
+          ? [...current.slice(1), resting[0]] : current.slice(0, 4);
+        if (nextActive.length > 4) nextActive = nextActive.slice(0, 4);
+
+        // 2. 生成下周 40 坑位 + 4 条周汇总
+        const schedFields = [];
+        for (const p of nextActive) {
+          for (let d = 0; d < 5; d++) {
+            const dt = new Date(nextMonday); dt.setDate(nextMonday.getDate() + d);
+            for (const per of PERIODS) {
+              const slotDate = new Date(dt);
+              slotDate.setHours(per.key === 'am' ? 9 : 14, 0, 0, 0);
+              schedFields.push({
+                [F.sched['周次']]: nextLabel, [F.sched['摄影师']]: p.name,
+                [F.sched['星期']]: DAYS[d].label, [F.sched['时段']]: per.label,
+                [F.sched['日期']]: slotDate.getTime(), [F.sched['请假']]: false,
+                ...(F.sched['摄影师行'] ? { [F.sched['摄影师行']]: [{ id: p.id }] } : {})
+              });
+            }
+          }
+        }
+        await addRecords(T.sched, schedFields);
+        await addRecords(T.weekly, nextActive.map(p => ({
+          [F.weekly['周次']]: nextLabel, [F.weekly['摄影师']]: p.name, [F.weekly['上岗']]: true
+        })));
+
+        // 3. 本周周汇总打归档时间
+        const now = Date.now();
+        for (const pid of state.activeIds) {
+          const v = state.videos[pid];
+          if (v?.rowId) { try { await writeCell(T.weekly, F.weekly, v.rowId, '归档时间', now); } catch (e) {} }
+        }
+
+        // 4. 更新名单勾选
+        for (const p of state.photographers) {
+          const on = nextActive.includes(p);
+          if (p.onDuty !== on) { p.onDuty = on; try { await persistRoster(p.id); } catch (e) {} }
+        }
+
+        closeRolloverModal();
+        await refreshQuiet();
+        showToast(`已归档 ${state.weekLabel}，并生成 ${nextLabel} 新档期（下周一生效）`);
+      } catch (e) {
+        console.error(e);
+        showToast('归档失败：' + (e?.message || e) + '。若提示选项不存在，请先在多维表格「周次」字段中添加下周选项后重试。');
+      } finally {
+        btn.disabled = false; btn.textContent = '确认归档并开启下周';
+      }
+    }
+
+    // ═══════════════ CSV 导出 ═══════════════
+    function downloadCsv(filename, rows) {
+      const csv = '\uFEFF' + rows.map(r => r.map(c => `"${String(c ?? '').replace(/"/g, '""')}"`).join(',')).join('\n');
+      const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8;' }));
+      const a = document.createElement('a');
+      a.href = url; a.download = filename;
+      document.body.appendChild(a); a.click(); document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    }
+    function exportCurrentWeekCsv() {
+      const rows = [['周次', '摄影师', '当周完成拍摄(条)', '档期时段', '预约主播']];
+      state.activeIds.map(getPhotographerById).filter(Boolean).forEach(p => {
+        const cnt = Number(state.videos[p.id]?.count || 0);
+        let any = false;
+        ALL_SLOTS.forEach(sk => {
+          const s = slotInfo(p.id, sk);
+          if (s && s.host && s.host.trim()) { any = true; rows.push([state.weekLabel, p.name, cnt, formatSlotName(sk), s.host.trim()]); }
+        });
+        if (!any) rows.push([state.weekLabel, p.name, cnt, '暂无预约', '']);
+      });
+      downloadCsv(`摄影档期_${state.weekLabel}.csv`, rows);
+      showToast('本周档期 CSV 已导出');
+    }
+    function exportArchiveCsv(idx) {
+      const arc = state.archives[idx]; if (!arc) return;
+      const rows = [['周次', '日期范围', '摄影师', '当周完成拍摄(条)', '档期时段', '预约主播']];
+      arc.photographerNames.forEach(n => {
+        const cnt = Number(arc.completedVideos[n] || 0);
+        let any = false;
+        Object.entries(arc.bookings).forEach(([k, b]) => {
+          const pn = k.slice(0, k.lastIndexOf('|')); const sk = k.slice(k.lastIndexOf('|') + 1);
+          if (pn === n) { any = true; rows.push([arc.weekLabel, arc.dateRange, n, cnt, formatSlotName(sk), b.hostName]); }
+        });
+        if (!any) rows.push([arc.weekLabel, arc.dateRange, n, cnt, '暂无预约', '']);
+      });
+      downloadCsv(`历史归档_${arc.weekLabel}.csv`, rows);
+      showToast(`已导出 ${arc.weekLabel} 归档 CSV`);
+    }
+
+    // ═══════════════ 事件绑定 ═══════════════
+    document.getElementById('tabBooking').addEventListener('click', () => { activeTab = 'booking'; render(); });
+    document.getElementById('tabAdmin').addEventListener('click', () => { activeTab = 'admin'; render(); });
+    document.getElementById('tabArchive').addEventListener('click', () => { activeTab = 'archive'; render(); });
+    document.getElementById('btnExportCurrentCsv').addEventListener('click', exportCurrentWeekCsv);
+    document.getElementById('btnReload').addEventListener('click', async () => {
+      showToast('正在刷新…'); try { state = await buildState(); render(); showToast('已同步多维表格最新数据'); } catch (e) {}
+    });
+    document.getElementById('btnRollover').addEventListener('click', openRolloverModal);
+    document.getElementById('btnCloseRollover').addEventListener('click', closeRolloverModal);
+    document.getElementById('btnCancelRollover').addEventListener('click', closeRolloverModal);
+    document.getElementById('btnConfirmRollover').addEventListener('click', executeRollover);
+
+    document.getElementById('btnAutoFillDemo').addEventListener('click', async () => {
+      for (const p of state.photographers) {
+        ALL_SLOTS.forEach(sk => { const s = slotInfo(p.id, sk); if (s && s.leave) { s.leave = false; } });
+      }
+      if (state.mode === 'bitable') {
+        try {
+          const schedRecs = await readAll(T.sched);
+          const targets = schedRecs.filter(r => sel1(cell(r, F.sched, '周次')) === state.weekLabel && cell(r, F.sched, '请假') === true);
+          for (const r of targets) { try { await writeCell(T.sched, F.sched, r.recordId, '请假', false); } catch (e) {} }
+        } catch (e) {}
+        await refreshQuiet();
+      } else saveLocal();
+      render();
+      showToast('已重置：所有摄影师周一至周五全时段开放');
+    });
+
+    const mainEl = document.querySelector('main');
+
+    mainEl.addEventListener('change', async (e) => {
+      const slotInput = e.target.closest('[data-slot-input]');
+      if (slotInput) {
+        const [pid, sk] = slotInput.getAttribute('data-slot-input').split('|');
+        const val = slotInput.value.trim();
+        const s = slotInfo(pid, sk); if (!s) return;
+        if (val) {
+          const already = Boolean(s.host && s.host.trim());
+          if (!already && bookedCount(pid) >= 2) {
+            slotInput.value = '';
+            showToast('该摄影师本周已约满 2 个半天');
+            renderBookingView();
+            return;
+          }
+          s.host = val;
+          try { await persistSlot(pid, sk); } catch (err) { showToast('写入失败：' + (err?.message || err)); await refreshQuiet(); return; }
+          renderBookingView();
+          showToast(`已为「${val}」锁定 ${formatSlotName(sk)}`);
+        } else {
+          s.host = '';
+          try { await persistSlot(pid, sk); } catch (err) { showToast('写入失败：' + (err?.message || err)); await refreshQuiet(); return; }
+          renderBookingView();
+          showToast(`已释放 ${formatSlotName(sk)} 档期`);
+        }
+        return;
+      }
+
+      const toggle = e.target.closest('[data-toggle-photog]');
+      if (toggle) {
+        const pid = toggle.getAttribute('data-toggle-photog');
+        const p = getPhotographerById(pid);
+        if (toggle.checked) {
+          if (state.activeIds.length >= 4) { toggle.checked = false; showToast('每周只能选择 4 位摄影师，请先取消勾选 1 位'); return; }
+          p.onDuty = true; state.activeIds.push(pid);
+        } else {
+          if (state.activeIds.length <= 1) { toggle.checked = true; showToast('至少保留 1 位摄影师'); return; }
+          p.onDuty = false; state.activeIds = state.activeIds.filter(id => id !== pid);
+        }
+        try { await persistRoster(pid); } catch (err) { showToast('写入失败：' + (err?.message || err)); }
+        render();
+        return;
+      }
+    });
+
+    mainEl.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && e.target.matches('[data-slot-input]')) e.target.blur();
+    });
+
+    let renameTimer = null;
+    mainEl.addEventListener('input', async (e) => {
+      const videoInput = e.target.closest('[data-video-input]');
+      if (videoInput) {
+        const pid = videoInput.getAttribute('data-video-input');
+        const raw = videoInput.value.trim();
+        state.videos[pid] = state.videos[pid] || { rowId: null, count: '' };
+        state.videos[pid].count = raw === '' ? '' : Math.max(0, parseInt(raw, 10) || 0);
+        try { await persistVideos(pid); } catch (err) { showToast('写入失败：' + (err?.message || err)); }
+        return;
+      }
+      const pInput = e.target.closest('[data-rename-photog]');
+      if (pInput) {
+        const pid = pInput.getAttribute('data-rename-photog');
+        const p = getPhotographerById(pid);
+        if (!p) return;
+        p.name = pInput.value;
+        if (renameTimer) clearTimeout(renameTimer);
+        renameTimer = setTimeout(async () => {
+          try { await persistRename(pid); } catch (err) { showToast('改名失败：' + (err?.message || err)); }
+        }, 800);
+      }
+    });
+
+    mainEl.addEventListener('click', async (e) => {
+      const clearBtn = e.target.closest('[data-clear-slot]');
+      if (clearBtn) {
+        const [pid, sk] = clearBtn.getAttribute('data-clear-slot').split('|');
+        const s = slotInfo(pid, sk); if (!s) return;
+        s.host = '';
+        try { await persistSlot(pid, sk); } catch (err) {}
+        renderBookingView();
+        showToast(`已取消 ${formatSlotName(sk)} 预约`);
+        return;
+      }
+
+      const adminSlotBtn = e.target.closest('[data-admin-slot]');
+      if (adminSlotBtn) {
+        const [pid, sk] = adminSlotBtn.getAttribute('data-admin-slot').split('|');
+        const s = slotInfo(pid, sk); if (!s) { showToast('该时段无坑位记录'); return; }
+        s.leave = !s.leave;
+        if (s.leave && s.host && s.host.trim()) s.host = '';
+        try {
+          await persistLeave(pid, sk);
+          if (state.mode === 'bitable' && s.leave) { try { await persistSlot(pid, sk); } catch (err) {} }
+        } catch (err) { showToast('写入失败：' + (err?.message || err)); await refreshQuiet(); return; }
+        render();
+        showToast(s.leave ? '已将该时段设为请假/不可约' : '已恢复该时段为可预约');
+        return;
+      }
+
+      const exportArcBtn = e.target.closest('[data-export-archive]');
+      if (exportArcBtn) exportArchiveCsv(Number(exportArcBtn.getAttribute('data-export-archive')));
+    });
+
+    // ═══════════════ 启动 ═══════════════
+    try {
+      state = await buildState();
+      render();
+      if (state.mode === 'bitable') console.log('[档期插件] 已连接多维表格', state.weekLabel);
+    } catch (e) {
+      document.getElementById('bookingMatrixBody').innerHTML =
+        `<tr><td colspan="12" class="py-8 text-center text-rose-500 text-xs">加载失败：${escapeHtml(e?.message || String(e))}</td></tr>`;
+    }
+  </script>
+</body>
+</html>
