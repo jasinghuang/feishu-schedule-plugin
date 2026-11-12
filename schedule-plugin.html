@@ -388,6 +388,7 @@
       if (!T.weekly) console.log('[档期插件] 周汇总表不存在——完成拍摄数将使用摄影师表的「当周完成拍摄(条)」字段');
       console.log('[档期插件] 步骤2: 表连接成功');
       for (const [key, t] of [['sched', T.sched], ['photo', T.photo], ['weekly', T.weekly]]) {
+        if (!t) { F[key] = {}; continue; }
         const fm = await t.getFieldMetaList();
         fm.forEach(f => { F[key][f.name] = f.id; });
       }
