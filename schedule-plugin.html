@@ -860,9 +860,8 @@
           if (sel1(cell(r, F.sched, '周次')) !== state.weekLabel) return;
           const pn = sel1(cell(r, F.sched, '摄影师'));
           const p = state.photographers.find(x => x.name === pn);
-          if (!p) return;
-          if (p.onDuty) perPhoto[p.id] = (perPhoto[p.id] || 0) + 1;
-          else restingSlots.push({ rid: r.recordId, host: asText(cell(r, F.sched, '预约主播')) });
+          if (p && p.onDuty) perPhoto[p.id] = (perPhoto[p.id] || 0) + 1;
+          else restingSlots.push({ rid: r.recordId, host: asText(cell(r, F.sched, '预约主播')) }); // 轮休者的坑位 + 孤儿坑位(摄影师为空/名单无此人)
         });
         const needers = state.activeIds.filter(pid => (perPhoto[pid] || 0) < 10);
         if (!restingSlots.length || !needers.length) return 0;
