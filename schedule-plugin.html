@@ -155,7 +155,7 @@
               <h2 class="text-sm font-bold text-slate-900">1. 本周上岗摄影师</h2>
               <span id="selectedCountBadge" class="text-xs font-semibold px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700">已选 0 人</span>
             </div>
-            <p class="text-xs text-slate-500 mt-1">勾选即上岗：每位勾选的摄影师都会自动补齐本周 10 个坑位；未勾选者本周轮休、总览显示「不可约」。支持直接修改姓名。</p>
+            <p class="text-xs text-slate-500 mt-1">勾选即上岗：每位勾选的摄影师都会自动补齐本周 10 个坑位，并预生成下一周；未勾选者本周轮休、总览显示「不可约」。支持直接修改姓名。</p>
             <div id="photographerPoolList" class="mt-3 space-y-2"></div>
           </div>
         </div>
@@ -849,28 +849,48 @@
       if (state.mode === 'bitable') { await writeCell(T.photo, F.photo, pid, '摄影师', p.name); await refreshQuiet(); }
       else saveLocal();
     }
-    // ── 坑位自动对齐：勾选上岗 = 本周必须有完整 10 个坑位 ──
-    // 1) 轮休者/孤儿坑位优先按「缺哪个半天补哪个」转给上岗者；
-    // 2) 仍缺的半天直接补建，保证不再出现「勾了上岗却显示不可约」。
+    // ── 坑位自动对齐：勾选上岗 = 必须有完整 10 个坑位 ──
+    // 1) 本周：轮休者/孤儿坑位优先按「缺哪个半天补哪个」转给上岗者，仍缺的直接补建；
+    // 2) 下周：按当前勾选名单预生成（只补建，幂等），打开一次即可同时拥有本周+下周。
+    function slotFieldsFor(pid, weekLabel, monday, slotKey) {
+      const p = getPhotographerById(pid);
+      const [dKey, pKey] = slotKey.split('_');
+      const di = DAY_KEY.indexOf(dKey);
+      const per = PERIODS.find(x => x.key === pKey);
+      const dt = new Date(monday); dt.setDate(dt.getDate() + di);
+      dt.setHours(pKey === 'am' ? 9 : 14, 0, 0, 0);
+      return {
+        [F.sched['周次']]: weekLabel, [F.sched['摄影师']]: p.name,
+        [F.sched['星期']]: DAYS[di].label, [F.sched['时段']]: per.label,
+        [F.sched['日期']]: dt.getTime(), [F.sched['请假']]: false,
+        ...(F.sched['摄影师行'] ? { [F.sched['摄影师行']]: [{ id: pid }] } : {})
+      };
+    }
     async function reconcileSlots() {
       if (state.mode !== 'bitable' || !state.photographers?.length) return 0;
       try {
         const schedRecs = await readAll(T.sched);
-        const have = {};          // pid -> Set(day_period)
+        const have = {};          // pid -> Set(day_period) 本周
         const restingSlots = [];  // 轮休者坑位 + 孤儿坑位（摄影师为空/名单无此人）
+        const nextMonday = new Date(state.monday); nextMonday.setDate(nextMonday.getDate() + 7);
+        const { year: ny, week: nw } = isoWeekOfMonday(nextMonday);
+        const nextLabel = `${ny}年第${nw}周`;
+        const nextHave = {};      // pid -> Set 下周
         schedRecs.forEach(r => {
-          if (sel1(cell(r, F.sched, '周次')) !== state.weekLabel) return;
+          const wk = sel1(cell(r, F.sched, '周次'));
+          if (wk !== state.weekLabel && wk !== nextLabel) return;
           const pn = sel1(cell(r, F.sched, '摄影师'));
           const p = state.photographers.find(x => x.name === pn);
           const sk = slotOfCell(sel1(cell(r, F.sched, '星期')), sel1(cell(r, F.sched, '时段')));
-          if (p && p.onDuty) {
-            if (!have[p.id]) have[p.id] = new Set();
-            have[p.id].add(sk);
-          } else {
-            restingSlots.push({ rid: r.recordId, host: asText(cell(r, F.sched, '预约主播')), sk });
+          if (wk === state.weekLabel) {
+            if (p && p.onDuty) (have[p.id] || (have[p.id] = new Set())).add(sk);
+            else restingSlots.push({ rid: r.recordId, host: asText(cell(r, F.sched, '预约主播')), sk });
+          } else if (p && p.onDuty) {
+            (nextHave[p.id] || (nextHave[p.id] = new Set())).add(sk);
           }
         });
-        let moved = 0, canceled = 0, created = 0;
+        let moved = 0, canceled = 0, created = 0, createdNext = 0;
+        // A. 本周：转移轮休/孤儿坑位
         for (const slot of restingSlots) {
           const pid = state.activeIds.find(id => (have[id]?.size || 0) < 10 && !have[id]?.has(slot.sk));
           if (!pid) continue;
@@ -882,36 +902,31 @@
           (have[pid] || (have[pid] = new Set())).add(slot.sk);
           moved++;
         }
-        // 补建缺失坑位（每位勾选的上岗者本周必须是 10 个半天）
+        // A2. 本周：补建仍缺的半天
         for (const pid of state.activeIds) {
-          const p = getPhotographerById(pid);
           const owned = have[pid] || new Set();
           const missing = ALL_SLOTS.filter(sk => !owned.has(sk));
           if (!missing.length) continue;
-          const fieldsArr = missing.map(sk => {
-            const [dKey, pKey] = sk.split('_');
-            const di = DAY_KEY.indexOf(dKey);
-            const per = PERIODS.find(x => x.key === pKey);
-            const dt = new Date(state.monday); dt.setDate(dt.getDate() + di);
-            dt.setHours(pKey === 'am' ? 9 : 14, 0, 0, 0);
-            return {
-              [F.sched['周次']]: state.weekLabel, [F.sched['摄影师']]: p.name,
-              [F.sched['星期']]: DAYS[di].label, [F.sched['时段']]: per.label,
-              [F.sched['日期']]: dt.getTime(), [F.sched['请假']]: false,
-              ...(F.sched['摄影师行'] ? { [F.sched['摄影师行']]: [{ id: pid }] } : {})
-            };
-          });
-          await addRecords(T.sched, fieldsArr);
+          await addRecords(T.sched, missing.map(sk => slotFieldsFor(pid, state.weekLabel, state.monday, sk)));
           created += missing.length;
         }
-        if (moved || created) {
-          console.log('[档期插件] 坑位对齐: 转移', moved, '个, 补建', created, '个, 取消预约', canceled);
+        // B. 下周：按当前名单预生成（只补建）
+        for (const pid of state.activeIds) {
+          const owned = nextHave[pid] || new Set();
+          const missing = ALL_SLOTS.filter(sk => !owned.has(sk));
+          if (!missing.length) continue;
+          await addRecords(T.sched, missing.map(sk => slotFieldsFor(pid, nextLabel, nextMonday, sk)));
+          createdNext += missing.length;
+        }
+        if (moved || created || createdNext) {
+          console.log('[档期插件] 坑位对齐: 本周转移', moved, '本周补建', created, '下周补建', createdNext, '取消预约', canceled);
           const parts = [];
-          if (moved) parts.push(`转移 ${moved} 个`);
-          if (created) parts.push(`补建 ${created} 个`);
+          if (moved) parts.push(`本周转移 ${moved} 个`);
+          if (created) parts.push(`本周补建 ${created} 个`);
+          if (createdNext) parts.push(`下周（${nextLabel}）补建 ${createdNext} 个`);
           showToast(`坑位已对齐：${parts.join('、')}${canceled ? `（${canceled} 条预约因轮休取消）` : ''}`);
         }
-        return moved + created;
+        return moved + created + createdNext;
       } catch (e) { console.warn('[档期插件] 坑位对齐失败:', e?.message || e); return 0; }
     }
     async function syncAll() {
