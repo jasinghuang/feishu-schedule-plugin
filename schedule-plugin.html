@@ -359,6 +359,7 @@
     // ═══════════════ 数据源：飞书多维表格 ═══════════════
     const T = { sched: null, photo: null, weekly: null };
     const F = { sched: {}, photo: {}, weekly: {} }; // 字段名 → fieldId
+    const META = { sched: {}, photo: {}, weekly: {} }; // 字段名 → 完整 meta（含单选 options）
     const sel1 = v => {
       if (v == null) return '';
       if (typeof v === 'string') return v;
@@ -388,10 +389,34 @@
       if (!T.weekly) console.log('[档期插件] 周汇总表不存在——完成拍摄数将使用摄影师表的「当周完成拍摄(条)」字段');
       console.log('[档期插件] 步骤2: 表连接成功');
       for (const [key, t] of [['sched', T.sched], ['photo', T.photo], ['weekly', T.weekly]]) {
-        if (!t) { F[key] = {}; continue; }
+        if (!t) { F[key] = {}; META[key] = {}; continue; }
         const fm = await t.getFieldMetaList();
-        fm.forEach(f => { F[key][f.name] = f.id; });
+        fm.forEach(f => { F[key][f.name] = f.id; META[key][f.name] = f; });
       }
+    }
+    // 扩展开 SDK 写入单选必须传 {id,text}、关联必须传 IOpenLink；纯字符串/[{id}] 会被静默丢弃
+    function selectCell(tableKey, fieldName, text) {
+      const opts = META[tableKey]?.[fieldName]?.property?.options || [];
+      const hit = opts.find(o => o.name === text);
+      return hit ? { id: hit.id, text } : { text };
+    }
+    async function ensureSelectOptions(tableKey, table, fieldName, values) {
+      const meta = META[tableKey]?.[fieldName];
+      if (!meta) return;
+      const present = new Set((meta.property?.options || []).map(o => o.name));
+      const missing = [...new Set(values.filter(v => v && !present.has(v)))];
+      if (!missing.length) return;
+      const field = await table.getFieldById(meta.id);
+      await field.addOptions(missing.map(name => ({ name })));
+      META[tableKey][fieldName] = await field.getMeta();
+    }
+    function linkCell(pid, name) {
+      const tableId = T.photo?.id || '';
+      return { text: name, type: 'text', recordIds: [pid], tableId, record_ids: [pid], table_id: tableId };
+    }
+    async function ensureSlotOptions(weekLabels, pids) {
+      await ensureSelectOptions('sched', T.sched, '周次', weekLabels);
+      await ensureSelectOptions('sched', T.sched, '摄影师', pids.map(id => getPhotographerById(id)?.name || ''));
     }
     async function readAll(table) {
       // SDK 返回 {total, hasMore, records, pageToken}，分页游标为 pageToken
@@ -860,10 +885,12 @@
       const dt = new Date(monday); dt.setDate(dt.getDate() + di);
       dt.setHours(pKey === 'am' ? 9 : 14, 0, 0, 0);
       return {
-        [F.sched['周次']]: weekLabel, [F.sched['摄影师']]: p.name,
-        [F.sched['星期']]: DAYS[di].label, [F.sched['时段']]: per.label,
+        [F.sched['周次']]: selectCell('sched', '周次', weekLabel),
+        [F.sched['摄影师']]: selectCell('sched', '摄影师', p.name),
+        [F.sched['星期']]: selectCell('sched', '星期', DAYS[di].label),
+        [F.sched['时段']]: selectCell('sched', '时段', per.label),
         [F.sched['日期']]: dt.getTime(), [F.sched['请假']]: false,
-        ...(F.sched['摄影师行'] ? { [F.sched['摄影师行']]: [{ id: pid }] } : {})
+        ...(F.sched['摄影师行'] ? { [F.sched['摄影师行']]: linkCell(pid, p.name) } : {})
       };
     }
     async function reconcileSlots() {
@@ -890,13 +917,14 @@
           }
         });
         let moved = 0, canceled = 0, created = 0, createdNext = 0;
+        await ensureSlotOptions([state.weekLabel, nextLabel], state.activeIds);
         // A. 本周：转移轮休/孤儿坑位
         for (const slot of restingSlots) {
           const pid = state.activeIds.find(id => (have[id]?.size || 0) < 10 && !have[id]?.has(slot.sk));
           if (!pid) continue;
           const p = getPhotographerById(pid);
-          const fields = { [F.sched['摄影师']]: p.name };
-          if (F.sched['摄影师行']) fields[F.sched['摄影师行']] = [{ id: pid }];
+          const fields = { [F.sched['摄影师']]: selectCell('sched', '摄影师', p.name) };
+          if (F.sched['摄影师行']) fields[F.sched['摄影师行']] = linkCell(pid, p.name);
           if (slot.host) { fields[F.sched['预约主播']] = ''; canceled++; }
           await T.sched.setRecord(slot.rid, { fields });
           (have[pid] || (have[pid] = new Set())).add(slot.sk);
@@ -986,19 +1014,12 @@
         if (!nextActive.length) nextActive = current;
 
         // 2. 生成下周坑位（每人 10 个）+ 周汇总
+        await ensureSlotOptions([nextLabel], nextActive.map(p => p.id));
         const schedFields = [];
         for (const p of nextActive) {
-          for (let d = 0; d < 5; d++) {
-            const dt = new Date(nextMonday); dt.setDate(nextMonday.getDate() + d);
+          for (let d = 0; d < DAYS.length; d++) {
             for (const per of PERIODS) {
-              const slotDate = new Date(dt);
-              slotDate.setHours(per.key === 'am' ? 9 : 14, 0, 0, 0);
-              schedFields.push({
-                [F.sched['周次']]: nextLabel, [F.sched['摄影师']]: p.name,
-                [F.sched['星期']]: DAYS[d].label, [F.sched['时段']]: per.label,
-                [F.sched['日期']]: slotDate.getTime(), [F.sched['请假']]: false,
-                ...(F.sched['摄影师行'] ? { [F.sched['摄影师行']]: [{ id: p.id }] } : {})
-              });
+              schedFields.push(slotFieldsFor(p.id, nextLabel, nextMonday, `${DAY_KEY[d]}_${per.key}`));
             }
           }
         }
