@@ -963,27 +963,34 @@
       if (!T.week || !F.week['日期']) return 0;
       try {
         const recs = await readAll(T.week);
-        const have = new Set();
+        const byDate = new Map();
         recs.forEach(r => {
           const ts = cell(r, F.week, '日期');
-          if (typeof ts === 'number') have.add(fmtDate(new Date(ts)));
+          if (typeof ts === 'number') byDate.set(fmtDate(new Date(ts)), r);
         });
         const nextMonday = new Date(state.monday); nextMonday.setDate(nextMonday.getDate() + 7);
-        const need = [];
+        const need = [], fix = [];
         for (const monday of [state.monday, nextMonday]) {
           for (let d = 0; d < DAYS.length; d++) {
             const dt = new Date(monday); dt.setDate(dt.getDate() + d);
-            if (!have.has(fmtDate(dt))) need.push({ dt, dayLabel: DAYS[d].label });
+            const rec = byDate.get(fmtDate(dt));
+            if (!rec) need.push({ dt, dayLabel: DAYS[d].label });
+            else if (F.week['星期'] && !sel1(cell(rec, F.week, '星期'))) fix.push({ rec, dayLabel: DAYS[d].label });
           }
         }
-        if (!need.length) return 0;
-        await ensureSelectOptions('week', T.week, '星期', need.map(x => x.dayLabel));
-        await addRecords(T.week, need.map(({ dt, dayLabel }) => ({
-          [F.week['日期']]: dt.getTime(),
-          ...(F.week['星期'] ? { [F.week['星期']]: selectCell('week', '星期', dayLabel) } : {})
-        })));
-        console.log('[档期插件] 每周排期: 自动补建', need.length, '行');
-        return need.length;
+        if (!need.length && !fix.length) return 0;
+        await ensureSelectOptions('week', T.week, '星期', [...need, ...fix].map(x => x.dayLabel));
+        for (const f of fix) {
+          await T.week.setRecord(f.rec.recordId, { fields: { [F.week['星期']]: selectCell('week', '星期', f.dayLabel) } });
+        }
+        if (need.length) {
+          await addRecords(T.week, need.map(({ dt, dayLabel }) => ({
+            [F.week['日期']]: dt.getTime(),
+            ...(F.week['星期'] ? { [F.week['星期']]: selectCell('week', '星期', dayLabel) } : {})
+          })));
+        }
+        console.log('[档期插件] 每周排期: 补建', need.length, '行, 修正星期', fix.length, '行');
+        return need.length + fix.length;
       } catch (e) { console.warn('[档期插件] 每周排期补行失败:', e?.message || e); return 0; }
     }
     async function syncAll() {
