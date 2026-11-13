@@ -969,24 +969,25 @@
           if (typeof ts === 'number') byDate.set(fmtDate(new Date(ts)), r);
         });
         const nextMonday = new Date(state.monday); nextMonday.setDate(nextMonday.getDate() + 7);
+        const dayIsFormula = META.week?.['星期']?.type === 'formula'; // 星期为公式时由日期自动算，不能写入
         const need = [], fix = [];
         for (const monday of [state.monday, nextMonday]) {
           for (let d = 0; d < DAYS.length; d++) {
             const dt = new Date(monday); dt.setDate(dt.getDate() + d);
             const rec = byDate.get(fmtDate(dt));
             if (!rec) need.push({ dt, dayLabel: DAYS[d].label });
-            else if (F.week['星期'] && !sel1(cell(rec, F.week, '星期'))) fix.push({ rec, dayLabel: DAYS[d].label });
+            else if (!dayIsFormula && F.week['星期'] && !sel1(cell(rec, F.week, '星期'))) fix.push({ rec, dayLabel: DAYS[d].label });
           }
         }
         if (!need.length && !fix.length) return 0;
-        await ensureSelectOptions('week', T.week, '星期', [...need, ...fix].map(x => x.dayLabel));
+        if (!dayIsFormula) await ensureSelectOptions('week', T.week, '星期', [...need, ...fix].map(x => x.dayLabel));
         for (const f of fix) {
           await T.week.setRecord(f.rec.recordId, { fields: { [F.week['星期']]: selectCell('week', '星期', f.dayLabel) } });
         }
         if (need.length) {
           await addRecords(T.week, need.map(({ dt, dayLabel }) => ({
             [F.week['日期']]: dt.getTime(),
-            ...(F.week['星期'] ? { [F.week['星期']]: selectCell('week', '星期', dayLabel) } : {})
+            ...(!dayIsFormula && F.week['星期'] ? { [F.week['星期']]: selectCell('week', '星期', dayLabel) } : {})
           })));
         }
         console.log('[档期插件] 每周排期: 补建', need.length, '行, 修正星期', fix.length, '行');
