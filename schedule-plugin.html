@@ -152,10 +152,10 @@
         <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-4 space-y-4">
           <div>
             <div class="flex items-center justify-between">
-              <h2 class="text-sm font-bold text-slate-900">1. 本周上岗摄影师（5选4）</h2>
-              <span id="selectedCountBadge" class="text-xs font-semibold px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700">已选 0 / 4</span>
+              <h2 class="text-sm font-bold text-slate-900">1. 本周上岗摄影师</h2>
+              <span id="selectedCountBadge" class="text-xs font-semibold px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700">已选 0 人</span>
             </div>
-            <p class="text-xs text-slate-500 mt-1">勾选本周开放预约的 4 位摄影师，未勾选的 1 位本周轮休。支持直接修改姓名。</p>
+            <p class="text-xs text-slate-500 mt-1">勾选即上岗：每位勾选的摄影师都会自动补齐本周 10 个坑位；未勾选者本周轮休、总览显示「不可约」。支持直接修改姓名。</p>
             <div id="photographerPoolList" class="mt-3 space-y-2"></div>
           </div>
         </div>
@@ -227,7 +227,7 @@
         <div id="rolloverSummaryBox" class="rounded-xl bg-slate-50 border border-slate-200 p-3.5 space-y-1 text-slate-700"></div>
 
         <div class="space-y-2">
-          <label class="block font-semibold text-slate-700">下周 5选4 摄影师策略</label>
+          <label class="block font-semibold text-slate-700">下周名单策略</label>
           <label class="flex items-start gap-2 p-2.5 rounded-lg border border-slate-200 cursor-pointer hover:bg-slate-50">
             <input type="radio" name="rolloverStrategy" value="rotate" checked class="mt-0.5 text-indigo-600" />
             <div>
@@ -238,8 +238,8 @@
           <label class="flex items-start gap-2 p-2.5 rounded-lg border border-slate-200 cursor-pointer hover:bg-slate-50">
             <input type="radio" name="rolloverStrategy" value="keep" class="mt-0.5 text-indigo-600" />
             <div>
-              <div class="font-medium text-slate-900">沿用本周 4 位摄影师阵容</div>
-              <div class="text-slate-500">保持相同 4 位摄影师，后续可在「摄影师填报与排班」微调</div>
+              <div class="font-medium text-slate-900">沿用本周上岗名单</div>
+              <div class="text-slate-500">保持当前勾选的所有摄影师，后续可在「摄影师填报与排班」微调</div>
             </div>
           </label>
         </div>
@@ -721,7 +721,7 @@
     }
 
     function renderAdminView() {
-      document.getElementById('selectedCountBadge').textContent = `已选 ${state.activeIds.length} / 4`;
+      document.getElementById('selectedCountBadge').textContent = `已选 ${state.activeIds.length} 人`;
       document.getElementById('photographerPoolList').innerHTML = state.photographers.map(p => {
         const checked = state.activeIds.includes(p.id);
         return `
@@ -849,40 +849,69 @@
       if (state.mode === 'bitable') { await writeCell(T.photo, F.photo, pid, '摄影师', p.name); await refreshQuiet(); }
       else saveLocal();
     }
-    // ── 坑位自动对齐：轮休者的本周坑位自动转给缺坑位的上岗者（其上预约随之取消）──
+    // ── 坑位自动对齐：勾选上岗 = 本周必须有完整 10 个坑位 ──
+    // 1) 轮休者/孤儿坑位优先按「缺哪个半天补哪个」转给上岗者；
+    // 2) 仍缺的半天直接补建，保证不再出现「勾了上岗却显示不可约」。
     async function reconcileSlots() {
       if (state.mode !== 'bitable' || !state.photographers?.length) return 0;
       try {
         const schedRecs = await readAll(T.sched);
-        const perPhoto = {};
-        const restingSlots = [];
+        const have = {};          // pid -> Set(day_period)
+        const restingSlots = [];  // 轮休者坑位 + 孤儿坑位（摄影师为空/名单无此人）
         schedRecs.forEach(r => {
           if (sel1(cell(r, F.sched, '周次')) !== state.weekLabel) return;
           const pn = sel1(cell(r, F.sched, '摄影师'));
           const p = state.photographers.find(x => x.name === pn);
-          if (p && p.onDuty) perPhoto[p.id] = (perPhoto[p.id] || 0) + 1;
-          else restingSlots.push({ rid: r.recordId, host: asText(cell(r, F.sched, '预约主播')) }); // 轮休者的坑位 + 孤儿坑位(摄影师为空/名单无此人)
+          const sk = slotOfCell(sel1(cell(r, F.sched, '星期')), sel1(cell(r, F.sched, '时段')));
+          if (p && p.onDuty) {
+            if (!have[p.id]) have[p.id] = new Set();
+            have[p.id].add(sk);
+          } else {
+            restingSlots.push({ rid: r.recordId, host: asText(cell(r, F.sched, '预约主播')), sk });
+          }
         });
-        const needers = state.activeIds.filter(pid => (perPhoto[pid] || 0) < 10);
-        if (!restingSlots.length || !needers.length) return 0;
-        let moved = 0, canceled = 0, ni = 0;
+        let moved = 0, canceled = 0, created = 0;
         for (const slot of restingSlots) {
-          while (ni < needers.length && (perPhoto[needers[ni]] || 0) >= 10) ni++;
-          if (ni >= needers.length) break;
-          const pid = needers[ni];
+          const pid = state.activeIds.find(id => (have[id]?.size || 0) < 10 && !have[id]?.has(slot.sk));
+          if (!pid) continue;
           const p = getPhotographerById(pid);
           const fields = { [F.sched['摄影师']]: p.name };
           if (F.sched['摄影师行']) fields[F.sched['摄影师行']] = [{ id: pid }];
           if (slot.host) { fields[F.sched['预约主播']] = ''; canceled++; }
           await T.sched.setRecord(slot.rid, { fields });
-          perPhoto[pid] = (perPhoto[pid] || 0) + 1;
+          (have[pid] || (have[pid] = new Set())).add(slot.sk);
           moved++;
         }
-        if (moved) {
-          console.log('[档期插件] 坑位对齐: 转移', moved, '个, 取消预约', canceled);
-          showToast(`已自动把 ${moved} 个坑位转给上岗摄影师${canceled ? `（${canceled} 条预约因轮休取消）` : ''}`);
+        // 补建缺失坑位（每位勾选的上岗者本周必须是 10 个半天）
+        for (const pid of state.activeIds) {
+          const p = getPhotographerById(pid);
+          const owned = have[pid] || new Set();
+          const missing = ALL_SLOTS.filter(sk => !owned.has(sk));
+          if (!missing.length) continue;
+          const fieldsArr = missing.map(sk => {
+            const [dKey, pKey] = sk.split('_');
+            const di = DAY_KEY.indexOf(dKey);
+            const per = PERIODS.find(x => x.key === pKey);
+            const dt = new Date(state.monday); dt.setDate(dt.getDate() + di);
+            dt.setHours(pKey === 'am' ? 9 : 14, 0, 0, 0);
+            return {
+              [F.sched['周次']]: state.weekLabel, [F.sched['摄影师']]: p.name,
+              [F.sched['星期']]: DAYS[di].label, [F.sched['时段']]: per.label,
+              [F.sched['日期']]: dt.getTime(), [F.sched['请假']]: false,
+              ...(F.sched['摄影师行'] ? { [F.sched['摄影师行']]: [{ id: pid }] } : {})
+            };
+          });
+          await addRecords(T.sched, fieldsArr);
+          created += missing.length;
         }
-        return moved;
+        if (moved || created) {
+          console.log('[档期插件] 坑位对齐: 转移', moved, '个, 补建', created, '个, 取消预约', canceled);
+          const parts = [];
+          if (moved) parts.push(`转移 ${moved} 个`);
+          if (created) parts.push(`补建 ${created} 个`);
+          showToast(`坑位已对齐：${parts.join('、')}${canceled ? `（${canceled} 条预约因轮休取消）` : ''}`);
+        }
+        return moved + created;
       } catch (e) { console.warn('[档期插件] 坑位对齐失败:', e?.message || e); return 0; }
     }
     async function syncAll() {
@@ -934,14 +963,14 @@
         const { year, week } = isoWeekOfMonday(nextMonday);
         const nextLabel = `${year}年第${week}周`;
 
-        // 1. 名单轮换
+        // 1. 下周名单：沿用当前勾选（轮换规则由管理员决定，不强制 4 人）
         const current = state.photographers.filter(p => state.activeIds.includes(p.id));
         const resting = state.photographers.filter(p => !state.activeIds.includes(p.id));
         let nextActive = strategy === 'rotate' && resting.length > 0
-          ? [...current.slice(1), resting[0]] : current.slice(0, 4);
-        if (nextActive.length > 4) nextActive = nextActive.slice(0, 4);
+          ? [...current.slice(1), resting[0]] : current;
+        if (!nextActive.length) nextActive = current;
 
-        // 2. 生成下周 40 坑位 + 4 条周汇总
+        // 2. 生成下周坑位（每人 10 个）+ 周汇总
         const schedFields = [];
         for (const p of nextActive) {
           for (let d = 0; d < 5; d++) {
@@ -1091,7 +1120,6 @@
         const pid = toggle.getAttribute('data-toggle-photog');
         const p = getPhotographerById(pid);
         if (toggle.checked) {
-          if (state.activeIds.length >= 4) { toggle.checked = false; showToast('每周只能选择 4 位摄影师，请先取消勾选 1 位'); return; }
           p.onDuty = true; state.activeIds.push(pid);
         } else {
           if (state.activeIds.length <= 1) { toggle.checked = true; showToast('至少保留 1 位摄影师'); return; }
