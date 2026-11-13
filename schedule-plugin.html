@@ -357,9 +357,9 @@
     }
 
     // ═══════════════ 数据源：飞书多维表格 ═══════════════
-    const T = { sched: null, photo: null, weekly: null };
-    const F = { sched: {}, photo: {}, weekly: {} }; // 字段名 → fieldId
-    const META = { sched: {}, photo: {}, weekly: {} }; // 字段名 → 完整 meta（含单选 options）
+    const T = { sched: null, photo: null, weekly: null, week: null };
+    const F = { sched: {}, photo: {}, weekly: {}, week: {} }; // 字段名 → fieldId
+    const META = { sched: {}, photo: {}, weekly: {}, week: {} }; // 字段名 → 完整 meta（含单选 options）
     const sel1 = v => {
       if (v == null) return '';
       if (typeof v === 'string') return v;
@@ -381,14 +381,15 @@
       const metas = await bitable.base.getTableMetaList();
       console.log('[档期插件] 数据表:', metas.map(m => m.name).join('/'));
       const find = n => metas.find(m => m.name === n);
-      const ms = find('档期预约'), mp = find('摄影师'), mw = find('周汇总');
+      const ms = find('档期预约'), mp = find('摄影师'), mw = find('周汇总'), mweek = find('每周排期');
       if (!ms || !mp) throw new Error('缺少数据表：需要「档期预约」「摄影师」两张表（周汇总可选）');
       T.sched = await bitable.base.getTableById(ms.id);
       T.photo = await bitable.base.getTableById(mp.id);
       T.weekly = mw ? await bitable.base.getTableById(mw.id) : null;
+      T.week = mweek ? await bitable.base.getTableById(mweek.id) : null;
       if (!T.weekly) console.log('[档期插件] 周汇总表不存在——完成拍摄数将使用摄影师表的「当周完成拍摄(条)」字段');
       console.log('[档期插件] 步骤2: 表连接成功');
-      for (const [key, t] of [['sched', T.sched], ['photo', T.photo], ['weekly', T.weekly]]) {
+      for (const [key, t] of [['sched', T.sched], ['photo', T.photo], ['weekly', T.weekly], ['week', T.week]]) {
         if (!t) { F[key] = {}; META[key] = {}; continue; }
         const fm = await t.getFieldMetaList();
         fm.forEach(f => { F[key][f.name] = f.id; META[key][f.name] = f; });
@@ -957,9 +958,39 @@
         return moved + created + createdNext;
       } catch (e) { console.warn('[档期插件] 坑位对齐失败:', e?.message || e); return 0; }
     }
+    // ── 每周排期表：补齐本周/下周的 5 个工作日行（日期+星期，其余列由管理员填）──
+    async function ensureWeekRows() {
+      if (!T.week || !F.week['日期']) return 0;
+      try {
+        const recs = await readAll(T.week);
+        const have = new Set();
+        recs.forEach(r => {
+          const ts = cell(r, F.week, '日期');
+          if (typeof ts === 'number') have.add(fmtDate(new Date(ts)));
+        });
+        const nextMonday = new Date(state.monday); nextMonday.setDate(nextMonday.getDate() + 7);
+        const need = [];
+        for (const monday of [state.monday, nextMonday]) {
+          for (let d = 0; d < DAYS.length; d++) {
+            const dt = new Date(monday); dt.setDate(dt.getDate() + d);
+            if (!have.has(fmtDate(dt))) need.push({ dt, dayLabel: DAYS[d].label });
+          }
+        }
+        if (!need.length) return 0;
+        await ensureSelectOptions('week', T.week, '星期', need.map(x => x.dayLabel));
+        await addRecords(T.week, need.map(({ dt, dayLabel }) => ({
+          [F.week['日期']]: dt.getTime(),
+          ...(F.week['星期'] ? { [F.week['星期']]: selectCell('week', '星期', dayLabel) } : {})
+        })));
+        console.log('[档期插件] 每周排期: 自动补建', need.length, '行');
+        return need.length;
+      } catch (e) { console.warn('[档期插件] 每周排期补行失败:', e?.message || e); return 0; }
+    }
     async function syncAll() {
       const moved = await reconcileSlots();
+      const weekRows = await ensureWeekRows();
       if (moved > 0) { try { state = await loadBitableState(); } catch (e) { console.warn(e); } }
+      if (weekRows > 0) showToast(`已自动补充「每周排期」${weekRows} 行`);
       render();
     }
 
