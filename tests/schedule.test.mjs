@@ -71,3 +71,23 @@ test('reported shoots cannot be deleted and leave cannot erase reservations', as
   await assert.rejects(store.setLeave('摄影师甲',addDays(monday,1),'下午',true),/已有拍摄/);
   assert.equal(sdk.fixture.writes.length,0);
 });
+test('creating two-photographer shoot writes one master row and one count', async () => {
+  const {sdk,store} = await setup(); const past=addDays(monday,-7);
+  const draft={id:'',date:past,periods:['下午'],host:'主播A',photographers:['摄影师甲','摄影师乙'],script:'该场唯一脚本',count:12};
+  await store.saveShoot(draft);
+  const result=await store.loadWeek(past);
+  assert.equal(result.shoots.length,1);assert.equal(summarize(result.shoots).count,12);
+  assert.equal(participantsTotal(result.shoots,'摄影师甲'),12);assert.equal(participantsTotal(result.shoots,'摄影师乙'),12);
+  assert.equal(sdk.fixture.writes.length,1);assert.equal(sdk.fixture.writes[0].key,'week');
+});
+test('assignment validation uses concurrent date changes instead of stale form date', async () => {
+  const {sdk,store,data} = await setup(); const original=data.shoots.find(s=>s.id==='shoot1');
+  sdk.fixture.rows.week[0].fields[TARGET.fields.week.date]=timestamp(addDays(monday,3));
+  await assert.rejects(store.saveShoot({...original,photographers:['摄影师甲']},original),/已安排/);
+  assert.equal(sdk.fixture.writes.length,0);
+});
+test('leave writes only availability fields and never copies host or scripts', async () => {
+  const {sdk,store} = await setup();await store.setLeave('摄影师甲',monday,'上午',true);
+  assert.equal(sdk.fixture.writes.length,1);const write=sdk.fixture.writes[0];assert.equal(write.key,'slots');
+  assert.deepEqual(Object.keys(write.value.fields).sort(),Object.values(TARGET.fields.slots).sort());
+});
