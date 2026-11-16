@@ -198,7 +198,7 @@ legend { font-size:12px; font-weight:500; padding:0; margin-bottom:7px; }
  .roster-sidebar { padding-right:13px; }
  .shoot-heading,.shoot-row { grid-template-columns:minmax(70px,1fr) 65px minmax(110px,1.3fr) minmax(80px,1fr) 83px 49px; gap:9px; padding-left:14px; padding-right:14px; }
 }
-@media(max-width:760px) {
+@media(max-width:900px) {
  .app { padding:19px 16px 42px; }
  .roster-layout { grid-template-columns:1fr; gap:16px; padding:16px; }
  .roster-sidebar { border-right:0; border-bottom:1px solid var(--line); padding:0 0 12px; }
