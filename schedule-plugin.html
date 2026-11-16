@@ -5,16 +5,16 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="light dark">
   <title>拍摄排期 · v2</title>
-  <link rel="stylesheet" href="./schedule.css?v=20261116-ui2">
+  <link rel="stylesheet" href="./schedule.css?v=20261116-studio">
 </head>
 <body>
   <main class="app">
     <header class="app-header">
-      <div><h1>拍摄排期<span class="title-dot" aria-hidden="true"></span></h1><p id="connection" class="connection" role="status">正在连接飞书…</p></div>
+      <div><h1><span class="title-mark" aria-hidden="true"><i></i><i></i><i></i></span>拍摄排期</h1><p id="connection" class="connection" role="status">正在连接飞书…</p></div>
       <div class="week-total"><span id="total-label">本周实拍</span><div><strong id="total">—</strong><span class="total-unit">条</span></div><span id="total-meta">正在读取</span></div>
     </header>
     <div class="toolbar">
-      <div class="week-navigation"><div class="week-nav" aria-label="选择拍摄周次"><button id="previous-week" class="icon-button" aria-label="上一周">‹</button><label class="week-picker" title="选择日期查看所在周"><span id="week-label">本周</span><svg aria-hidden="true" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="m6 9 6 6 6-6"/></svg><input id="week-date" type="date" aria-label="选择日期查看所在周"></label><button id="next-week" class="icon-button" aria-label="下一周">›</button><button id="this-week" class="quiet">回到本周</button></div><p id="week-range" class="muted"></p></div>
+      <div class="week-navigation"><div class="week-nav" aria-label="选择拍摄周次"><button id="previous-week" class="icon-button" aria-label="上一周">‹</button><label class="week-picker" title="选择日期查看所在周"><span id="week-label">本周</span><svg aria-hidden="true" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="m6 9 6 6 6-6"/></svg><input id="week-date" type="date" aria-label="选择日期查看所在周"></label><button id="next-week" class="icon-button" aria-label="下一周">›</button><button id="this-week" class="quiet" hidden>回到本周</button></div><p id="week-range" class="muted"></p></div>
       <div class="actions"><button id="refresh" class="quiet" aria-label="刷新排期" title="刷新排期"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M20 7v5h-5M4 17v-5h5M6 7a7 7 0 0 1 12-1l2 3M4 15l2 3a7 7 0 0 0 12-1"/></svg><span>刷新</span></button></div>
     </div>
     <div id="error" class="error-banner" role="alert" hidden></div>
@@ -41,6 +41,6 @@
   </dialog>
   <dialog id="slot-dialog" aria-labelledby="slot-title" aria-describedby="slot-context"><header class="dialog-header"><div><h2 id="slot-title">安排时段</h2><p id="slot-context" class="muted"></p></div><button data-close="slot-dialog" class="icon-button" aria-label="关闭时段设置">×</button></header><div class="slot-options"><h3 id="slot-existing-label">加入已有场次</h3><div id="slot-existing"></div><div class="leave-action"><button id="slot-leave">设为请假</button></div><p id="slot-error" class="form-error" role="alert" hidden></p></div></dialog>
   <dialog id="cancel-dialog" aria-labelledby="cancel-title"><form id="cancel-form"><header class="dialog-header"><h2 id="cancel-title">取消这场拍摄？</h2></header><p>取消后会删除这条未填报拍摄记录，并释放全部参与摄影师的时段。</p><footer class="dialog-footer"><button type="button" data-close="cancel-dialog">保留拍摄</button><button type="submit" class="danger">确认取消</button></footer></form></dialog>
-  <script type="module" src="./schedule-app.mjs?v=20261116-ui2"></script>
+  <script type="module" src="./schedule-app.mjs?v=20261116-studio"></script>
 </body>
 </html>

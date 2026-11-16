@@ -35,7 +35,7 @@ const copy = object => structuredClone(object);
 
 function render() {
   const focused = focusedControl(), totals = summarize(data.shoots);
-  $('week-label').textContent = weekLabel(monday);
+  $('week-label').textContent = `${monday === mondayOf() ? '本周 · ' : ''}${weekLabel(monday).replace(/^\d{4}年/, '')}`;
   $('week-date').value = monday;
   $('total-label').textContent = monday === mondayOf() ? '本周实拍' : '该周实拍';
   $('export').textContent = monday === mondayOf() ? '导出本周' : '导出该周';
@@ -49,14 +49,14 @@ function render() {
 }
 function renderShoots() {
   if (!data.shoots.length) { $('shoot-list').className = 'empty'; $('shoot-list').textContent = '这一周还没有拍摄安排'; return; }
-  $('shoot-list').className = '';
+  $('shoot-list').className = 'shoot-board';
   const dates = [...new Set(data.shoots.map(s => s.date))];
-  $('shoot-list').innerHTML = dates.map(date => {
+  $('shoot-list').innerHTML = '<div class="shoot-heading" aria-hidden="true"><span>主播</span><span>时段</span><span>参与摄影师</span><span>脚本</span><span class="count">实拍条数</span><span></span></div>' + dates.map(date => {
     const shoots = data.shoots.filter(s => s.date === date);
-    return `<section class="day-group"><header class="day-heading"><h3>${dayName(date)} · ${date.slice(5).replace('-', '/')}</h3><span>${shoots.length}场</span></header><div class="shoot-heading" aria-hidden="true"><span>主播</span><span>时段</span><span>参与摄影师</span><span>脚本</span><span class="count">实拍条数</span><span></span></div>${shoots.map(s => {
+    return `<section class="day-group"><header class="day-heading"><h3>${dayName(date)} · ${date.slice(5).replace('-', '/')}</h3><span>${shoots.length}场</span></header>${shoots.map(s => {
       const url = scriptUrl(s.script);
       const script = url ? `<a href="${esc(url)}" target="_blank" rel="noopener noreferrer" title="${esc(s.script)}">查看脚本 ↗</a>` : `<span title="${esc(s.script)}">${esc(s.script || '待提供')}</span>`;
-      return `<article class="shoot-row"><button class="host-button" data-shoot="${esc(s.id)}">${esc(s.host)}</button><span class="period-cell"><span class="period-tag">${esc(s.periods.join('、'))}</span></span><span class="photos"><span class="mobile-label">摄影师</span>${s.photographers.length ? s.photographers.map(name => `<span class="person-chip">${esc(name)}</span>`).join('') : '<span class="muted">待安排</span>'}</span><span class="script-cell"><span class="mobile-label">脚本</span>${script}</span><span class="count"><span class="mobile-label">实拍</span>${s.count == null ? '<span class="pending-badge">待填条数</span>' : `${s.count}条`}</span><span class="row-action"><button data-shoot="${esc(s.id)}" aria-label="${data.canEdit ? '编辑' : '查看'}${esc(s.host)}${esc(date)}拍摄">${data.canEdit ? '编辑' : '查看'}</button></span></article>`;
+      return `<article class="shoot-row"><button class="host-button" data-shoot="${esc(s.id)}">${esc(s.host)}</button><span class="period-cell"><span class="period-tag">${esc(s.periods.join('、'))}</span></span><span class="photos"><span class="mobile-label">摄影师</span>${s.photographers.length ? s.photographers.map(name => `<span class="person-chip">${esc(name)}</span>`).join('') : '<span class="muted">待安排</span>'}</span><span class="script-cell"><span class="mobile-label">脚本</span>${script}</span><span class="count"><span class="mobile-label">实拍</span>${s.count == null ? '<span class="pending-badge">待填条数</span>' : `${s.count}条`}</span><span class="row-action"><button data-shoot="${esc(s.id)}" aria-label="${data.canEdit ? '编辑' : '查看'}${esc(s.host)}${esc(date)}拍摄"><span aria-hidden="true">›</span></button></span></article>`;
     }).join('')}</section>`;
   }).join('');
 }
@@ -74,12 +74,13 @@ function renderRoster() {
   // Existing weekend shoots and leave must remain reachable in both views.
   const weekend = data.shoots.some(s => s.date >= addDays(monday, 5)) || [...data.slotRecords.keys()].some(key => key.split('|')[1] >= addDays(monday, 5));
   const days = Array.from({ length: weekend ? 7 : 5 }, (_, i) => addDays(monday, i));
-  $('day-grid').innerHTML = days.map(date => `<section class="schedule-day ${date === dateKey(Date.now()) ? 'today' : ''}"><h3>${dayName(date)}<small>${date.slice(5).replace('-', '/')}</small></h3>${PERIODS.map(period => {
+  $('day-grid').style.setProperty('--day-count', days.length);
+  $('day-grid').innerHTML = '<div class="period-axis" aria-hidden="true"><span></span><span>上午</span><span>下午</span></div>' + days.map(date => `<section class="schedule-day ${date === dateKey(Date.now()) ? 'today' : ''}"><h3>${dayName(date)}<small>${date.slice(5).replace('-', '/')}</small></h3>${PERIODS.map(period => {
     const shoots = occupied(data.shoots, name, date, period), leave = data.leaves.has(leaveKey(name, date, period));
     const clash = shoots.length > 1 || (shoots.length && (leave || rest));
-    if (shoots.length) return `<div class="schedule-slot booked ${clash ? 'conflict' : ''}"><small>${period}${clash ? ' · 冲突' : ''}</small>${shoots.map(shoot => `<button data-shoot="${esc(shoot.id)}" aria-label="${esc(name)} ${date}${period} ${esc(shoot.host)}拍摄">${esc(shoot.host)}<small>${shoot.count == null ? '待填条数' : shoot.count + '条'}</small></button>`).join('')}</div>`;
+    if (shoots.length) return `<div class="schedule-slot booked ${clash ? 'conflict' : ''}"><small class="slot-period">${period}</small>${clash ? '<span class="conflict-label">冲突</span>' : ''}${shoots.map(shoot => `<button data-shoot="${esc(shoot.id)}" aria-label="${esc(name)} ${date}${period} ${esc(shoot.host)}拍摄">${esc(shoot.host)}<small>${shoot.photographers.length > 1 ? '协拍 · ' : ''}${shoot.count == null ? '待填条数' : shoot.count + '条'}</small></button>`).join('')}</div>`;
     const disabled = leave ? !data.canEditLeave : rest || (!data.canEdit && !data.canEditLeave && !data.canAddLeave);
-    return `<button class="schedule-slot ${leave || rest ? 'leave' : 'open'}" data-slot-name="${esc(name)}" data-slot-date="${date}" data-slot-period="${period}" ${disabled ? 'disabled' : ''} aria-label="${esc(name)} ${date}${period} ${leave ? '取消请假' : rest ? '本周轮休' : '加入已有场次或请假'}"><small>${period}</small><span class="${leave || rest ? '' : 'plus'}">${leave ? '请假' : rest ? '轮休' : '＋'}</span></button>`;
+    return `<button class="schedule-slot ${leave || rest ? 'leave' : 'open'}" data-slot-name="${esc(name)}" data-slot-date="${date}" data-slot-period="${period}" ${disabled ? 'disabled' : ''} aria-label="${esc(name)} ${date}${period} ${leave ? '取消请假' : rest ? '本周轮休' : '加入已有场次或请假'}"><small class="slot-period">${period}</small><span class="${leave || rest ? '' : 'plus'}">${leave ? '请假' : rest ? '轮休' : '＋'}</span></button>`;
   }).join('')}</section>`).join('');
   restoreFocus(focused);
 }
@@ -111,7 +112,7 @@ function switchView(roster) {
 }
 function openEditor(shoot) {
   if (!data || !shoot || saving) return;
-  $('editor').dataset.returnFocus = focusedControl();
+  $('editor').dataset.returnFocus = `[data-shoot="${CSS.escape(shoot.id)}"]`;
   baseline = copy(shoot); uncertain = false;
   const draft = shoot, editable = data.canEdit;
   $('editor-title').textContent = `${draft.host} · 拍摄记录`;
@@ -151,7 +152,7 @@ async function save(event) {
 }
 function openSlot(name, date, period) {
   if (!data || saving) return;
-  $('slot-dialog').dataset.returnFocus = focusedControl();
+  $('slot-dialog').dataset.returnFocus = `[data-slot-name="${CSS.escape(name)}"][data-slot-date="${date}"][data-slot-period="${period}"]`;
   slot = { name, date, period };
   $('slot-context').textContent = `${name} · ${date.slice(5).replace('-', '/')} ${dayName(date)} · ${period}`;
   const leave = data.leaves.has(leaveKey(name, date, period));
