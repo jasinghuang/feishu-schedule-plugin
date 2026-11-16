@@ -1,4 +1,4 @@
-import { TARGET, addDays, mondayOf, timestamp, text, options, normalizeShoot, sortShoots, inWeek, leaveKey, validateShoot, assignmentProblems, changedKeys, sameValue } from './schedule-core.mjs';
+import { TARGET, addDays, mondayOf, timestamp, text, options, normalizeShoot, sortShoots, inWeek, leaveKey, validateShoot, assignmentProblems, changedKeys, sameValue } from './schedule-core.mjs?v=20261116-links';
 
 export async function readPages(table, filter) {
   const rows = [];
@@ -80,7 +80,11 @@ export class ScheduleStore {
   encode(key, value) {
     if (key === 'date') return timestamp(value);
     if (key === 'count') return value;
-    if (key === 'script') return value ? [{ type: 'text', text: value }] : null;
+    if (key === 'script') {
+      if (!value) return null;
+      const link = value.match(/^\[([\s\S]*)\]\((https?:\/\/\S+)\)$/);
+      return link ? [{ type:'url', text:link[1], link:link[2] }] : [{ type:'text', text:value }];
+    }
     const encodeOption = name => {
       const found = this.selectOptions(key).find(o => o.name === name);
       if (!found) throw new Error(`字段「${this.meta.week[TARGET.fields.week[key]].name}」中没有选项「${name}」，请在飞书表中添加后刷新`);

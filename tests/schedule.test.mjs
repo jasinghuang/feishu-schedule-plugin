@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { TARGET, summarize, participantsTotal, occupied, mondayOf, addDays, dateKey, timestamp, assignmentProblems, validateShoot, scriptUrl } from '../schedule-core.mjs';
+import { TARGET, summarize, participantsTotal, occupied, mondayOf, addDays, dateKey, timestamp, assignmentProblems, validateShoot, scriptUrl, normalizeShoot } from '../schedule-core.mjs';
 import { ScheduleStore, readPages } from '../schedule-data.mjs';
 import { previewSdk } from './preview-sdk.mjs';
 
@@ -142,4 +142,23 @@ test('leave can be canceled without changing shoots; missing or ambiguous roster
   await assert.rejects(store.setLeave('不存在',monday,'上午',true),/不在摄影师表/);
   sdk.fixture.rows.photo.push(structuredClone(sdk.fixture.rows.photo[0]));
   await assert.rejects(store.loadWeek(monday),/重名/);
+});
+
+test('Feishu document mentions retain their link when viewing and editing another field', async () => {
+  const {sdk,store}=await setup(), field=TARGET.fields.week.script;
+  const segments=[{type:'mention',mentionType:'Docx',text:'本场脚本',token:'synthetic',link:'https://example.com/script'}];
+  sdk.fixture.rows.week[0].fields[field]=segments;
+  const shoot=await store.getShoot('shoot1');
+  assert.equal(shoot.script,'[本场脚本](https://example.com/script)');
+  assert.equal(scriptUrl(shoot.script),'https://example.com/script');
+  await store.saveShoot({...shoot,count:20},shoot);
+  assert.deepEqual(sdk.fixture.rows.week[0].fields[field],segments);
+  assert.deepEqual(Object.keys(sdk.fixture.writes[0].value.fields),[TARGET.fields.week.count]);
+  const updated=await store.getShoot('shoot1');
+  await store.saveShoot({...updated,script:'[新版脚本](https://example.com/new)'},updated);
+  assert.deepEqual(sdk.fixture.rows.week[0].fields[field],[{type:'url',text:'新版脚本',link:'https://example.com/new'}]);
+  assert.equal(scriptUrl((await store.getShoot('shoot1')).script),'https://example.com/new');
+  assert.equal(scriptUrl('[脚本](javascript:alert(1))'),'');
+  assert.equal(scriptUrl('[脚本](data:text/html,bad)'),'');
+  assert.equal(normalizeShoot({recordId:'url',fields:{[field]:[{type:'url',text:'脚本文档',link:'https://example.com/doc'}]}}).script,'[脚本文档](https://example.com/doc)');
 });

@@ -51,12 +51,21 @@ export function numberOrNull(value) {
   const n = Number(text(value));
   return Number.isFinite(n) ? n : null;
 }
+function scriptText(value) {
+  if (Array.isArray(value)) return value.map(scriptText).join('');
+  // Feishu document mentions carry their URL separately from the visible title.
+  if (value?.link && /^https?:\/\/\S+$/.test(value.link)) {
+    const title = text(value);
+    return title === value.link ? title : `[${title}](${value.link})`;
+  }
+  return text(value);
+}
 export function normalizeShoot(record, fields = TARGET.fields.week) {
   const f = record.fields || {};
   return {
     id: record.recordId, date: dateKey(f[fields.date]),
     periods: options(f[fields.periods]), photographers: options(f[fields.photographers]),
-    host: text(f[fields.host]).trim(), script: text(f[fields.script]), count: numberOrNull(f[fields.count])
+    host: text(f[fields.host]).trim(), script: scriptText(f[fields.script]), count: numberOrNull(f[fields.count])
   };
 }
 export function inWeek(shoot, monday) { return !!shoot.date && shoot.date >= monday && shoot.date < addDays(monday, 7); }
@@ -108,6 +117,8 @@ export function changedKeys(draft, baseline) {
   return Object.keys(TARGET.fields.week).filter(key => !baseline || !sameValue(draft[key], baseline[key]));
 }
 export function scriptUrl(script) {
-  const match = script.trim().match(/^https?:\/\/\S+$/);
-  return match ? match[0] : '';
+  const value = script.trim();
+  const markdown = value.match(/^\[[\s\S]*\]\((https?:\/\/\S+)\)$/);
+  const url = markdown ? markdown[1] : value;
+  return /^https?:\/\/\S+$/.test(url) ? url : '';
 }
