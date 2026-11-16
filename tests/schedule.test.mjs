@@ -91,3 +91,55 @@ test('leave writes only availability fields and never copies host or scripts', a
   assert.equal(sdk.fixture.writes.length,1);const write=sdk.fixture.writes[0];assert.equal(write.key,'slots');
   assert.deepEqual(Object.keys(write.value.fields).sort(),Object.values(TARGET.fields.slots).sort());
 });
+test('joining an existing shoot only changes participants and keeps one shared count', async () => {
+  const {sdk,store} = await setup();
+  await store.joinShoot('shoot1','摄影师丁',addDays(monday,1),'下午');
+  const data=await store.loadWeek(monday), shoot=data.shoots.find(s=>s.id==='shoot1');
+  assert.deepEqual(shoot.photographers,['摄影师甲','摄影师乙','摄影师丁']);
+  assert.equal(shoot.count,16); assert.equal(summarize(data.shoots).count,59); assert.equal(data.shoots.length,4);
+  assert.equal(sdk.fixture.writes.length,1);
+  assert.deepEqual(Object.keys(sdk.fixture.writes[0].value.fields),[TARGET.fields.week.photographers]);
+  await store.joinShoot('shoot1','摄影师丁',addDays(monday,1),'下午');
+  assert.equal(sdk.fixture.writes.length,1);
+});
+test('joining rejects a different date or half-day, including a move during saving', async () => {
+  const {sdk,store}=await setup();
+  await assert.rejects(store.joinShoot('shoot1','摄影师丁',monday,'下午'),/已调整时段/);
+  await assert.rejects(store.joinShoot('shoot1','摄影师丁',addDays(monday,1),'上午'),/已调整时段/);
+  const table=sdk.fixture.tables[TARGET.week],get=table.getRecordById;let reads=0;
+  table.getRecordById=async id=>{ if(++reads===2) sdk.fixture.rows.week[0].fields[TARGET.fields.week.date]=timestamp(addDays(monday,2));return get(id); };
+  await assert.rejects(store.joinShoot('shoot1','摄影师丁',addDays(monday,1),'下午'),/已调整时段/);
+  assert.equal(sdk.fixture.writes.length,0);
+});
+test('roster choices come from photographer records, never legacy select options', async () => {
+  const {sdk,store}=await setup();
+  sdk.fixture.meta.week.find(f=>f.id===TARGET.fields.week.photographers).property.options.push({id:'orphan',name:'旧名单孤立姓名'});
+  sdk.fixture.rows.photo.push({recordId:'newphoto',fields:{[TARGET.fields.photo.name]:[{type:'text',text:'新增摄影师'}],[TARGET.fields.photo.onDuty]:true}});
+  const data=await store.loadWeek(monday);
+  assert.ok(data.photographers.some(p=>p.name==='新增摄影师'));
+  assert.ok(!data.photographers.some(p=>p.name==='旧名单孤立姓名'));
+  await assert.rejects(store.joinShoot('shoot1','旧名单孤立姓名',addDays(monday,1),'下午'),/须来自摄影师表/);
+  sdk.fixture.meta.week.find(f=>f.id===TARGET.fields.week.photographers).property.options.push({id:'newopt',name:'新增摄影师'});
+  await store.joinShoot('shoot1','新增摄影师',addDays(monday,1),'下午');
+  assert.ok((await store.getShoot('shoot1')).photographers.includes('新增摄影师'));
+});
+test('join respects per-cell permission and independent roster/leave permissions', async () => {
+  const {sdk,store}=await setup();
+  sdk.base.getPermission=async p=>p.param.tableId!==TARGET.week;
+  const data=await store.loadWeek(monday);assert.equal(data.canEdit,false);assert.equal(data.canEditRoster,true);assert.equal(data.canEditLeave,true);
+  sdk.base.getPermission=async p=>p.param.fieldId!==TARGET.fields.week.photographers;
+  await assert.rejects(store.joinShoot('shoot1','摄影师丁',addDays(monday,1),'下午'),/权限/);
+  assert.equal(sdk.fixture.writes.length,0);
+});
+test('leave can be canceled without changing shoots; missing or ambiguous roster is rejected', async () => {
+  const {sdk,store}=await setup();
+  await store.setLeave('摄影师丁',monday,'上午',true);
+  assert.ok((await store.loadWeek(monday)).leaves.has(`摄影师丁|${monday}|上午`));
+  await store.setLeave('摄影师丁',monday,'上午',false);
+  assert.equal((await store.loadWeek(monday)).leaves.size,0);
+  assert.equal(summarize((await store.loadWeek(monday)).shoots).count,59);
+  assert.ok(sdk.fixture.writes.every(w=>w.key==='slots'));
+  await assert.rejects(store.setLeave('不存在',monday,'上午',true),/不在摄影师表/);
+  sdk.fixture.rows.photo.push(structuredClone(sdk.fixture.rows.photo[0]));
+  await assert.rejects(store.loadWeek(monday),/重名/);
+});

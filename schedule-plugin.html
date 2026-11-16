@@ -15,19 +15,19 @@
     </header>
     <div class="toolbar">
       <div class="week-nav" aria-label="选择拍摄周次"><button id="previous-week" aria-label="上一周">‹</button><label class="week-picker"><span id="week-label">本周</span><input id="week-date" type="date" aria-label="选择日期查看所在周"></label><button id="next-week" aria-label="下一周">›</button><button id="this-week" class="quiet">本周</button></div>
-      <div class="actions"><button id="refresh">刷新</button><button id="settings" hidden>摄影师设置</button><button id="new-shoot" class="primary" hidden>新增拍摄</button></div>
+      <div class="actions"><button id="refresh">刷新</button></div>
     </div>
     <div id="error" class="error-banner" role="alert" hidden></div>
     <div id="notice" class="notice" role="status" hidden></div>
-    <div class="view-bar"><div class="tabs" role="tablist" aria-label="排期查看方式"><button id="shoot-tab" class="selected" role="tab" aria-selected="true" aria-controls="shoot-panel">按拍摄查看</button><button id="matrix-tab" role="tab" aria-selected="false" aria-controls="matrix-panel">摄影师矩阵</button></div><button id="export" class="quiet" disabled>导出该周</button></div>
+    <div class="view-bar"><div class="tabs" role="tablist" aria-label="排期查看方式"><button id="shoot-tab" class="selected" role="tab" aria-selected="true" aria-controls="shoot-panel">按拍摄查看</button><button id="roster-tab" role="tab" aria-selected="false" aria-controls="roster-panel" tabindex="-1">摄影师排班</button></div><button id="export" class="quiet" disabled>导出该周</button></div>
     <section id="shoot-panel" role="tabpanel" aria-labelledby="shoot-tab"><div id="shoot-list" class="empty">正在读取排期…</div></section>
-    <section id="matrix-panel" role="tabpanel" aria-labelledby="matrix-tab" hidden><div id="matrix"></div></section>
+    <section id="roster-panel" role="tabpanel" aria-labelledby="roster-tab" hidden><div class="roster-layout"><aside class="roster-sidebar"><h2>摄影师</h2><span id="duty-label" class="muted">本周上岗</span><div id="roster"></div></aside><div class="personal-schedule"><header class="personal-heading"><h2 id="photographer-name"></h2><span id="photographer-total" class="muted"></span></header><div id="day-grid" class="day-grid"></div></div></div></section>
     <p id="week-range" class="footnote"></p>
   </main>
 
   <dialog id="editor" aria-labelledby="editor-title">
     <form id="shoot-form">
-      <header class="dialog-header"><div><p id="editor-subtitle" class="muted">每周排期</p><h2 id="editor-title">新增拍摄</h2></div><button type="button" data-close="editor" class="icon-button" aria-label="关闭拍摄记录">×</button></header>
+      <header class="dialog-header"><div><p id="editor-subtitle" class="muted">每周排期</p><h2 id="editor-title">拍摄记录</h2></div><button type="button" data-close="editor" class="icon-button" aria-label="关闭拍摄记录">×</button></header>
       <div class="form-grid">
         <label>日期<input id="shoot-date" type="date" required></label>
         <label>主播<select id="shoot-host" required></select></label>
@@ -40,8 +40,7 @@
       <footer class="dialog-footer"><button id="cancel-shoot" type="button" class="danger" hidden>取消整场拍摄</button><button id="open-base" type="button" class="quiet" hidden>在飞书表中查看</button><span class="spacer"></span><button type="button" data-close="editor">关闭</button><button id="save-shoot" class="primary" type="submit">保存</button></footer>
     </form>
   </dialog>
-  <dialog id="slot-dialog" aria-labelledby="slot-title"><header class="dialog-header"><h2 id="slot-title">摄影师时段</h2><button data-close="slot-dialog" class="icon-button" aria-label="关闭时段设置">×</button></header><div class="slot-options"><button id="slot-new" class="primary">安排新拍摄</button><label>加入该时段已有拍摄<select id="slot-existing"></select></label><button id="slot-join">加入拍摄</button><label class="check-label"><input id="slot-leave" type="checkbox">该时段请假</label><p id="slot-error" class="form-error" role="alert" hidden></p></div></dialog>
-  <dialog id="settings-dialog" aria-labelledby="settings-title"><header class="dialog-header"><h2 id="settings-title">本周上岗摄影师</h2><button data-close="settings-dialog" class="icon-button" aria-label="关闭摄影师设置">×</button></header><div id="roster" class="roster"></div><p class="footnote">上岗调整不改变已安排的拍摄记录。</p></dialog>
+  <dialog id="slot-dialog" aria-labelledby="slot-title"><header class="dialog-header"><h2 id="slot-title">摄影师时段</h2><button data-close="slot-dialog" class="icon-button" aria-label="关闭时段设置">×</button></header><div class="slot-options"><h3 id="slot-existing-label">加入已有场次</h3><div id="slot-existing"></div><button id="slot-leave">该时段请假</button><p id="slot-error" class="form-error" role="alert" hidden></p></div></dialog>
   <dialog id="cancel-dialog" aria-labelledby="cancel-title"><form id="cancel-form"><header class="dialog-header"><h2 id="cancel-title">取消这场拍摄？</h2></header><p>取消后会删除这条未填报拍摄记录，并释放全部参与摄影师的时段。</p><footer class="dialog-footer"><button type="button" data-close="cancel-dialog">保留拍摄</button><button type="submit" class="danger">确认取消</button></footer></form></dialog>
   <script type="module" src="./schedule-app.mjs"></script>
 </body>

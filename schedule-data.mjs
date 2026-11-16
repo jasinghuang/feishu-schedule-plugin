@@ -52,13 +52,15 @@ export class ScheduleStore {
     ] };
   }
   async loadWeek(monday) {
-    const [rows, photographerRows, slotRows, canEdit, canAdd] = await Promise.all([
+    const [rows, photographerRows, slotRows, canEdit, canAdd, canEditRoster, canEditLeave, canAddLeave] = await Promise.all([
       readPages(this.tables.week, this.filterWeek(TARGET.fields.week.date, monday)),
       readPages(this.tables.photo),
       readPages(this.tables.slots, this.filterWeek(TARGET.fields.slots.date, monday)),
-      this.allowed('week', 'editable'), this.allowed('week', 'addable')
+      this.allowed('week', 'editable'), this.allowed('week', 'addable'),
+      this.allowed('photo', 'editable'), this.allowed('slots', 'editable'), this.allowed('slots', 'addable')
     ]);
-    const photographers = photographerRows.map(r => ({ id: r.recordId, name: text(r.fields[TARGET.fields.photo.name]), onDuty: r.fields[TARGET.fields.photo.onDuty] === true }));
+    const photographers = photographerRows.map(r => ({ id: r.recordId, name: text(r.fields[TARGET.fields.photo.name]).trim(), onDuty: r.fields[TARGET.fields.photo.onDuty] === true })).filter(p => p.name);
+    if (new Set(photographers.map(p => p.name)).size !== photographers.length) throw new Error('摄影师表存在重名，请先为摄影师设置唯一姓名');
     const leaves = new Set();
     const slotRecords = new Map();
     slotRows.forEach(r => {
@@ -72,7 +74,7 @@ export class ScheduleStore {
         if (f[s.leave] === true) leaves.add(key);
       }));
     });
-    return { monday, shoots: sortShoots(rows.map(r => normalizeShoot(r)).filter(s => inWeek(s, monday) && s.host)), photographers, leaves, slotRecords, canEdit, canAdd, hosts: this.selectOptions('host') };
+    return { monday, shoots: sortShoots(rows.map(r => normalizeShoot(r)).filter(s => inWeek(s, monday) && s.host)), photographers, leaves, slotRecords, canEdit, canAdd, canEditRoster, canEditLeave, canAddLeave, hosts: this.selectOptions('host') };
   }
   selectOptions(key) { return (this.meta.week[TARGET.fields.week[key]].property?.options || []).map(o => ({ id: o.id, name: o.name })).filter(o => o.name); }
   encode(key, value) {
@@ -87,13 +89,14 @@ export class ScheduleStore {
     return Array.isArray(value) ? (value.length ? value.map(encodeOption) : null) : encodeOption(value);
   }
   async getShoot(id) { return normalizeShoot({ ...(await this.tables.week.getRecordById(id)), recordId: id }); }
-  async saveShoot(draft, baseline) {
+  async saveShoot(draft, baseline, expectedSlot) {
     validateShoot(draft);
     const keys = changedKeys(draft, baseline);
     if (!keys.length) return draft.id;
     if (draft.id) {
       await this.requirePermission('week', 'editable', draft.id);
       const latest = await this.getShoot(draft.id);
+      if (expectedSlot && (!latest.host || latest.date !== expectedSlot.date || !latest.periods.includes(expectedSlot.period))) throw new Error('该拍摄场次已调整时段，请刷新后重新选择');
       if (keys.some(key => !sameValue(latest[key], baseline[key]))) throw new Error('这条记录刚被其他摄影师修改，请重新打开后编辑');
       // Validate against concurrent edits to fields this save does not replace.
       draft = { ...latest, ...Object.fromEntries(keys.map(key => [key, draft[key]])) };
@@ -101,8 +104,11 @@ export class ScheduleStore {
     for (const key of keys) await this.requirePermission('week', 'editable', draft.id || undefined, TARGET.fields.week[key]);
     if (keys.some(key => ['date', 'periods', 'photographers', 'host'].includes(key))) {
       const current = await this.loadWeek(mondayOf(draft.date));
+      const addedNames = draft.photographers.filter(name => !baseline?.photographers.includes(name));
+      if (addedNames.some(name => !current.photographers.some(p => p.name === name))) throw new Error('参与摄影师须来自摄影师表，请刷新名单后重试');
       const problems = assignmentProblems(draft, current.shoots, current.photographers, current.leaves);
       if (problems.length) throw new Error(problems.join('；'));
+      this.meta.week = Object.fromEntries((await this.tables.week.getFieldMetaList()).map(f => [f.id, f]));
     }
     const fields = Object.fromEntries(keys.map(key => [TARGET.fields.week[key], this.encode(key, draft[key])]));
     const result = draft.id ? await this.tables.week.setRecord(draft.id, { fields }) : await this.tables.week.addRecord({ fields });
@@ -130,8 +136,15 @@ export class ScheduleStore {
     await this.requirePermission('photo', 'editable', id, fieldId);
     await this.tables.photo.setRecord(id, { fields: { [fieldId]: checked } });
   }
+  async joinShoot(id, name, date, period) {
+    const shoot = await this.getShoot(id);
+    if (!shoot.host || shoot.date !== date || !shoot.periods.includes(period)) throw new Error('该拍摄场次已调整时段，请刷新后重新选择');
+    if (shoot.photographers.includes(name)) return id;
+    return this.saveShoot({ ...shoot, photographers: [...shoot.photographers, name] }, shoot, { date, period });
+  }
   async setLeave(name, date, period, checked) {
     const current = await this.loadWeek(mondayOf(date));
+    if (!current.photographers.some(p => p.name === name)) throw new Error('摄影师已不在摄影师表中，请刷新后重试');
     const conflicts = current.shoots.filter(s => s.date === date && s.periods.includes(period) && s.photographers.includes(name));
     if (checked && conflicts.length) throw new Error('该时段已有拍摄，请先调整参与摄影师，再标记请假');
     const ids = current.slotRecords.get(leaveKey(name, date, period)) || [];
@@ -143,6 +156,7 @@ export class ScheduleStore {
       }
     } else if (checked) {
       await this.requirePermission('slots', 'addable');
+      this.meta.slots = Object.fromEntries((await this.tables.slots.getFieldMetaList()).map(f => [f.id, f]));
       const field = this.meta.slots[fields.photographer];
       const option = field.property.options.find(o => o.name === name);
       const periodOption = this.meta.slots[fields.period].property.options.find(o => o.name === period);
