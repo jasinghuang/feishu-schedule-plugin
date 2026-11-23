@@ -53,11 +53,11 @@
             },
             {
               "field_name": "已有排期数",
-              "operator": "is",
+              "operator": "isLess",
               "value": [
                 {
                   "value_type": "number",
-                  "value": 0
+                  "value": 1
                 }
               ]
             }
