@@ -149,6 +149,37 @@ test('leave writes only availability fields and never copies host or scripts', a
   assert.equal(sdk.fixture.writes.length,1);const write=sdk.fixture.writes[0];assert.equal(write.key,'slots');
   assert.deepEqual(Object.keys(write.value.fields).sort(),Object.values(TARGET.fields.slots).sort());
 });
+test('new leave links the roster row and all seven weekdays; cancel and repeat preserve the same slot', async () => {
+  const {sdk,store} = await setup();
+  const fields = TARGET.fields.slots, future = addDays(monday,7);
+  const shootsBefore = structuredClone(sdk.fixture.rows.week);
+  const days = ['周一','周二','周三','周四','周五','周六','周日'];
+  for (const [i,weekday] of days.entries()) {
+    const date = addDays(future,i);
+    await store.setLeave('摄影师丁',date,'上午',true);
+    const row = sdk.fixture.rows.slots.at(-1);
+    assert.deepEqual(row.fields[fields.photographerRow],{recordIds:['photo3'],tableId:TARGET.photo,text:'摄影师丁',type:'text'});
+    assert.equal(row.fields[fields.weekday].text,weekday);
+    assert.equal(dateKey(row.fields[fields.date]),date);
+    assert.ok((await store.loadWeek(future)).leaves.has(`摄影师丁|${date}|上午`));
+  }
+  const sunday = addDays(future,6), before = structuredClone(sdk.fixture.rows.slots.at(-1));
+  await store.setLeave('摄影师丁',sunday,'上午',false);
+  assert.deepEqual(Object.keys(sdk.fixture.writes.at(-1).value.fields),[fields.leave]);
+  assert.deepEqual(sdk.fixture.rows.slots.at(-1),{...before,fields:{...before.fields,[fields.leave]:false}});
+  await store.setLeave('摄影师丁',sunday,'上午',true);
+  assert.equal(sdk.fixture.rows.slots.length,7);
+  assert.deepEqual(sdk.fixture.rows.week,shootsBefore);
+  assert.equal(summarize((await store.loadWeek(monday)).shoots).count,59);
+});
+test('new leave fails before writing when its linked roster or weekday field is not editable', async () => {
+  for (const field of [TARGET.fields.slots.photographerRow,TARGET.fields.slots.weekday]) {
+    const {sdk,store} = await setup();
+    sdk.base.getPermission = async ({param}) => param.fieldId !== field;
+    await assert.rejects(store.setLeave('摄影师丁',addDays(monday,7),'上午',true),/权限/);
+    assert.equal(sdk.fixture.writes.length,0);
+  }
+});
 test('joining an existing shoot only changes participants and keeps one shared count', async () => {
   const {sdk,store} = await setup();
   await store.joinShoot('shoot1','摄影师丁',addDays(monday,1),'下午');

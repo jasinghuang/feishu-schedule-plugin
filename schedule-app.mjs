@@ -1,5 +1,5 @@
-import { TARGET, PERIODS, addDays, dateKey, mondayOf, weekLabel, dayName, summarize, participantsTotal, occupied, halfDayCount, leaveKey, sortShoots, scriptUrl } from './schedule-core.mjs?v=20261123-multishoot';
-import { ScheduleStore } from './schedule-data.mjs?v=20261123-multishoot';
+import { TARGET, PERIODS, addDays, dateKey, mondayOf, weekLabel, dayName, summarize, participantsTotal, occupied, halfDayCount, leaveKey, sortShoots, scriptUrl } from './schedule-core.mjs?v=20261123-leaveweek';
+import { ScheduleStore } from './schedule-data.mjs?v=20261123-leaveweek';
 
 const $ = id => document.getElementById(id);
 const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]));

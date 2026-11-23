@@ -1,4 +1,4 @@
-import { TARGET, PERIODS, mondayOf, addDays, timestamp, dateKey } from '../schedule-core.mjs';
+import { TARGET, PERIODS, DAY_NAMES, mondayOf, addDays, timestamp, dateKey } from '../schedule-core.mjs';
 
 // Synthetic fixtures only: the public preview never contains Base records or credentials.
 export function previewSdk({ writable = true, baseId = TARGET.base, now = mondayOf() } = {}) {
@@ -8,7 +8,7 @@ export function previewSdk({ writable = true, baseId = TARGET.base, now = monday
   const meta = {
     week: Object.entries(wk).map(([key,id]) => ({ id, name:key, type: {date:5,periods:4,photographers:4,host:3,script:1,count:2}[key], property:{options:select(key === 'periods' ? PERIODS : key === 'host' ? ['主播A','主播B'] : ['摄影师甲','摄影师乙','摄影师丙','摄影师丁'])} })),
     photo: [{id:ph.name,type:1},{id:ph.onDuty,type:7}],
-    slots: [{id:sl.date,type:5},{id:sl.period,type:3,property:{options:select(PERIODS)}},{id:sl.photographer,type:3,property:{options:select(['摄影师甲','摄影师乙','摄影师丙','摄影师丁'])}},{id:sl.leave,type:7}]
+    slots: [{id:sl.date,type:5},{id:sl.period,type:3,property:{options:select(PERIODS)}},{id:sl.photographer,type:3,property:{options:select(['摄影师甲','摄影师乙','摄影师丙','摄影师丁'])}},{id:sl.leave,type:7},{id:sl.weekday,type:3,property:{options:select(DAY_NAMES)}},{id:sl.photographerRow,type:21,property:{tableId:TARGET.photo}}]
   };
   const option = name => ({ text:name, id:`fixture-${name}` });
   const makeShoot = (id, day, host, names, count) => ({ recordId:id, fields:{[wk.date]:timestamp(addDays(now,day)),[wk.periods]:[option('下午')],[wk.photographers]:names.map(option),[wk.host]:option(host),[wk.script]:[{type:'text',text:'https://example.com/script'}],[wk.count]:count} });

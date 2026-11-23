@@ -1,0 +1,20 @@
+[
+  {
+    "table_id": "tblVKEyGgtUq89li",
+    "field_id": "fld6a6l9OQ",
+    "field": {
+      "name": "本周标记",
+      "type": "formula",
+      "expression": "IF([日期]<TODAY()-WEEKDAY(TODAY(),2)+1,\"过去\",IF([日期]<TODAY()-WEEKDAY(TODAY(),2)+8,\"本周\",\"未来\"))"
+    }
+  },
+  {
+    "table_id": "tblYWtknjmuLaNYQ",
+    "field_id": "fldq9eGhdQ",
+    "field": {
+      "name": "本周标记",
+      "type": "formula",
+      "expression": "IF([日期]<TODAY()-WEEKDAY(TODAY(),2)+1,\"过去\",IF([日期]<TODAY()-WEEKDAY(TODAY(),2)+8,\"本周\",\"未来\"))"
+    }
+  }
+]

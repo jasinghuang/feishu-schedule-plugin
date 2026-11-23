@@ -1,4 +1,4 @@
-import { TARGET, addDays, mondayOf, timestamp, text, options, normalizeShoot, sortShoots, inWeek, leaveKey, validateShoot, assignmentProblems, changedKeys, sameValue } from './schedule-core.mjs?v=20261123-multishoot';
+import { TARGET, addDays, mondayOf, dayName, timestamp, text, options, normalizeShoot, sortShoots, inWeek, leaveKey, validateShoot, assignmentProblems, changedKeys, sameValue } from './schedule-core.mjs?v=20261123-leaveweek';
 
 export async function readPages(table, filter) {
   const rows = [];
@@ -154,7 +154,8 @@ export class ScheduleStore {
   }
   async setLeave(name, date, period, checked) {
     const current = await this.loadWeek(mondayOf(date));
-    if (!current.photographers.some(p => p.name === name)) throw new Error('摄影师已不在摄影师表中，请刷新后重试');
+    const photographer = current.photographers.find(p => p.name === name);
+    if (!photographer) throw new Error('摄影师已不在摄影师表中，请刷新后重试');
     const conflicts = current.shoots.filter(s => s.date === date && s.periods.includes(period) && s.photographers.includes(name));
     if (checked && conflicts.length) throw new Error('该时段已有拍摄，请先调整参与摄影师，再标记请假');
     const ids = current.slotRecords.get(leaveKey(name, date, period)) || [];
@@ -170,8 +171,17 @@ export class ScheduleStore {
       const field = this.meta.slots[fields.photographer];
       const option = field.property.options.find(o => o.name === name);
       const periodOption = this.meta.slots[fields.period].property.options.find(o => o.name === period);
-      if (!option || !periodOption) throw new Error('摄影师或时段选项未找到，请刷新后重试');
-      await this.tables.slots.addRecord({ fields: { [fields.date]: timestamp(date), [fields.photographer]: { id: option.id, text: name }, [fields.period]: { id: periodOption.id, text: period }, [fields.leave]: true } });
+      const weekdayOption = this.meta.slots[fields.weekday].property.options.find(o => o.name === dayName(date));
+      if (!option || !periodOption || !weekdayOption) throw new Error('摄影师、时段或星期选项未找到，请刷新后重试');
+      // Native roster formulas follow the linked photographer row and weekday.
+      const values = {
+        [fields.date]: timestamp(date), [fields.photographer]: { id: option.id, text: name },
+        [fields.period]: { id: periodOption.id, text: period }, [fields.leave]: true,
+        [fields.weekday]: { id: weekdayOption.id, text: weekdayOption.name },
+        [fields.photographerRow]: { recordIds: [photographer.id], tableId: TARGET.photo, text: name, type: 'text' }
+      };
+      for (const fieldId of Object.keys(values)) await this.requirePermission('slots', 'editable', undefined, fieldId);
+      await this.tables.slots.addRecord({ fields: values });
     }
   }
   subscribe(callback) {

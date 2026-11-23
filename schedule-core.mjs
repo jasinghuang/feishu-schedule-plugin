@@ -4,7 +4,7 @@ export const TARGET = Object.freeze({
   fields: {
     week: { date: 'fldMDbn9uW', periods: 'fldQodLQC5', photographers: 'fldST5qxfL', host: 'fld06KZr2B', script: 'fldaLtDhUT', count: 'fld8r4f6j5' },
     photo: { name: 'fldZrcZnOs', onDuty: 'fld9GlbeYn' },
-    slots: { date: 'fldZ37LyUk', period: 'fldicwmqdm', photographer: 'fldFFvcJz8', leave: 'fldvRCZrde' }
+    slots: { date: 'fldZ37LyUk', period: 'fldicwmqdm', photographer: 'fldFFvcJz8', leave: 'fldvRCZrde', weekday: 'fldRbu5GCJ', photographerRow: 'fldA5ewVOf' }
   }
 });
 export const PERIODS = ['上午', '下午'];
