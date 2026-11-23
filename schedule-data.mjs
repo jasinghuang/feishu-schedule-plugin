@@ -1,4 +1,4 @@
-import { TARGET, addDays, mondayOf, timestamp, text, options, normalizeShoot, sortShoots, inWeek, leaveKey, validateShoot, assignmentProblems, changedKeys, sameValue } from './schedule-core.mjs?v=20261123-weekly';
+import { TARGET, addDays, mondayOf, timestamp, text, options, normalizeShoot, sortShoots, inWeek, leaveKey, validateShoot, assignmentProblems, changedKeys, sameValue } from './schedule-core.mjs?v=20261123-multishoot';
 
 export async function readPages(table, filter) {
   const rows = [];
@@ -95,6 +95,12 @@ export class ScheduleStore {
   async getShoot(id) { return normalizeShoot({ ...(await this.tables.week.getRecordById(id)), recordId: id }); }
   async saveShoot(draft, baseline, expectedSlot) {
     validateShoot(draft);
+    if (!draft.id) {
+      const current = await this.loadWeek(mondayOf(draft.date));
+      const blank = current.shoots.find(s => s.date === draft.date && !s.host && !s.periods.length && !s.photographers.length && !s.script && s.count == null);
+      // Consume an untouched date template before adding another row for that day.
+      if (blank && await this.allowed('week', 'editable', blank.id)) return this.saveShoot({ ...draft, id: blank.id }, blank);
+    }
     const keys = changedKeys(draft, baseline);
     if (!keys.length) return draft.id;
     if (draft.id) {

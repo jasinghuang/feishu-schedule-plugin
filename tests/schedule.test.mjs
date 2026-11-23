@@ -32,6 +32,38 @@ test('dated blank rows stay editable without counting or occupying a shoot; fill
   assert.deepEqual(summarize(data.shoots), { sessions:5, count:59, unreported:1 });
   assert.equal(data.shoots.find(s => s.id === id).script, '待审核脚本');
 });
+test('new shoots reuse untouched date templates and allow different photographers in the same half-day', async () => {
+  const { sdk, store } = await setup();
+  const fields = TARGET.fields.week;
+  sdk.fixture.rows.week.length = 0;
+  sdk.fixture.rows.week.push({ recordId:'template', fields:{ [fields.date]:timestamp(monday) } });
+  const draft = { id:'', date:monday, host:'主播A', periods:['上午'], photographers:['摄影师丁'], script:'第一场脚本', count:null };
+  assert.equal(await store.saveShoot(draft), 'template');
+  assert.equal(sdk.fixture.rows.week.length, 1);
+  const second = { ...draft, host:'主播B', photographers:['摄影师丙'], script:'第二场脚本' };
+  const secondId = await store.saveShoot(second);
+  assert.notEqual(secondId, 'template');
+  assert.equal(sdk.fixture.rows.week.length, 2);
+  const data = await store.loadWeek(monday);
+  assert.equal(data.shoots.filter(s => s.date === monday && s.periods.includes('上午')).length, 2);
+  assert.equal(data.shoots.find(s => s.id === 'template').script, '第一场脚本');
+  assert.equal(data.shoots.find(s => s.id === secondId).script, '第二场脚本');
+  await assert.rejects(store.saveShoot({...draft, host:'主播B'}), /已安排/);
+  assert.equal(sdk.fixture.writes.length, 2);
+});
+test('creating never consumes partial drafts or records the user cannot edit', async () => {
+  const { sdk, store } = await setup();
+  const fields = TARGET.fields.week;
+  const noted = { recordId:'noted', fields:{ [fields.date]:timestamp(monday), [fields.script]:[{ type:'text', text:'保留的准备资料' }] } };
+  sdk.fixture.rows.week.push(noted, { recordId:'protected-template', fields:{ [fields.date]:timestamp(monday) } });
+  sdk.base.getPermission = async ({param}) => param.recordId !== 'protected-template';
+  const id = await store.saveShoot({ id:'', date:monday, host:'主播A', periods:['上午'], photographers:[], script:'新场次', count:null });
+  assert.ok(!['noted','protected-template'].includes(id));
+  assert.equal(sdk.fixture.rows.week.length, 7);
+  assert.equal(sdk.fixture.writes.length, 1);
+  assert.equal(sdk.fixture.writes[0].id, id);
+  assert.equal(noted.fields[fields.script][0].text, '保留的准备资料');
+});
 test('opening and refreshing only read; weekly count deduplicates shared photographers', async () => {
   const {sdk,store,data} = await setup();
   assert.deepEqual(summarize([...data.shoots, data.shoots[0]]),{sessions:4,count:59,unreported:0});
