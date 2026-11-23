@@ -6,6 +6,32 @@ import { previewSdk } from './preview-sdk.mjs';
 
 const monday = mondayOf();
 async function setup(opts) { const sdk = previewSdk(opts); const store = await new ScheduleStore(sdk).init(); return { sdk, store, data:await store.loadWeek(monday) }; }
+test('dated blank rows stay editable without counting or occupying a shoot; filling updates the same row', async () => {
+  const { sdk, store } = await setup();
+  const fields = TARGET.fields.week;
+  sdk.fixture.rows.week.push({ recordId:'blank-monday', fields:{ [fields.date]:timestamp(monday) } });
+  sdk.fixture.rows.week.push({ recordId:'undated', fields:{} });
+  let data = await store.loadWeek(monday);
+  const blank = data.shoots.find(s => s.id === 'blank-monday');
+  assert.ok(blank);
+  assert.equal(blank.host, '');
+  assert.equal(data.shoots.length, 5);
+  assert.ok(!data.shoots.some(s => s.id === 'undated'));
+  assert.deepEqual(summarize(data.shoots), { sessions:4, count:59, unreported:0 });
+  assert.deepEqual(occupied(data.shoots, '摄影师甲', monday, '上午'), []);
+  assert.equal(sdk.fixture.writes.length, 0);
+  await assert.rejects(store.saveShoot({...blank, periods:['上午']}, blank), /请选择主播/);
+  await assert.rejects(store.saveShoot({...blank, host:'主播A'}, blank), /请选择上午或下午/);
+  const id = await store.saveShoot({...blank, host:'主播A', periods:['上午'], script:'待审核脚本'}, blank);
+  assert.equal(id, 'blank-monday');
+  assert.equal(sdk.fixture.rows.week.length, 6);
+  assert.equal(sdk.fixture.writes.length, 1);
+  assert.equal(sdk.fixture.writes[0].id, 'blank-monday');
+  assert.ok(!Object.hasOwn(sdk.fixture.writes[0].value.fields, fields.count));
+  data = await store.loadWeek(monday);
+  assert.deepEqual(summarize(data.shoots), { sessions:5, count:59, unreported:1 });
+  assert.equal(data.shoots.find(s => s.id === id).script, '待审核脚本');
+});
 test('opening and refreshing only read; weekly count deduplicates shared photographers', async () => {
   const {sdk,store,data} = await setup();
   assert.deepEqual(summarize([...data.shoots, data.shoots[0]]),{sessions:4,count:59,unreported:0});

@@ -1,5 +1,5 @@
-import { TARGET, PERIODS, addDays, dateKey, mondayOf, weekLabel, dayName, summarize, participantsTotal, occupied, halfDayCount, leaveKey, sortShoots, scriptUrl } from './schedule-core.mjs?v=20261116-links';
-import { ScheduleStore } from './schedule-data.mjs?v=20261116-links';
+import { TARGET, PERIODS, addDays, dateKey, mondayOf, weekLabel, dayName, summarize, participantsTotal, occupied, halfDayCount, leaveKey, sortShoots, scriptUrl } from './schedule-core.mjs?v=20261123-weekly';
+import { ScheduleStore } from './schedule-data.mjs?v=20261123-weekly';
 
 const $ = id => document.getElementById(id);
 const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]));
@@ -35,13 +35,14 @@ const copy = object => structuredClone(object);
 
 function render() {
   const focused = focusedControl(), totals = summarize(data.shoots);
+  const pending = data.shoots.filter(s => !s.host).length;
   $('week-label').textContent = `${monday === mondayOf() ? '本周 · ' : ''}${weekLabel(monday).replace(/^\d{4}年/, '')}`;
   $('week-date').value = monday;
   $('total-label').textContent = monday === mondayOf() ? '本周实拍' : '该周实拍';
   $('export').textContent = monday === mondayOf() ? '导出本周' : '导出该周';
   $('this-week').hidden = monday === mondayOf();
   $('total').textContent = totals.count;
-  $('total-meta').textContent = `${totals.sessions}场拍摄${totals.unreported ? ` · ${totals.unreported}场待填条数` : totals.sessions ? ' · 已全部填报' : ''}`;
+  $('total-meta').textContent = `${totals.sessions}场拍摄${totals.unreported ? ` · ${totals.unreported}场待填条数` : totals.sessions ? ' · 已全部填报' : ''}${pending ? ` · ${pending}条待安排` : ''}`;
   $('connection').textContent = preview ? '演示数据 · 不写入飞书' : `飞书已连接${data.canEdit ? '' : ' · 只读'}`;
   $('export').disabled = false;
   $('week-range').textContent = `${monday.replaceAll('-', '/')} — ${addDays(monday, 6).replaceAll('-', '/')}`;
@@ -53,10 +54,10 @@ function renderShoots() {
   const dates = [...new Set(data.shoots.map(s => s.date))];
   $('shoot-list').innerHTML = '<div class="shoot-heading" aria-hidden="true"><span>主播</span><span>时段</span><span>参与摄影师</span><span>脚本</span><span class="count">实拍条数</span><span></span></div>' + dates.map(date => {
     const shoots = data.shoots.filter(s => s.date === date);
-    return `<section class="day-group"><header class="day-heading"><h3>${dayName(date)} · ${date.slice(5).replace('-', '/')}</h3><span>${shoots.length}场</span></header>${shoots.map(s => {
+    return `<section class="day-group"><header class="day-heading"><h3>${dayName(date)} · ${date.slice(5).replace('-', '/')}</h3><span>${shoots.filter(s => s.host).length}场</span></header>${shoots.map(s => {
       const url = scriptUrl(s.script);
       const script = url ? `<a href="${esc(url)}" target="_blank" rel="noopener noreferrer" title="${esc(s.script)}">查看脚本 ↗</a>` : `<span title="${esc(s.script)}">${esc(s.script || '待提供')}</span>`;
-      return `<article class="shoot-row"><button class="host-button" data-shoot="${esc(s.id)}">${esc(s.host)}</button><span class="period-cell"><span class="period-tag">${esc(s.periods.join('、'))}</span></span><span class="photos"><span class="mobile-label">摄影师</span>${s.photographers.length ? s.photographers.map(name => `<span class="person-chip">${esc(name)}</span>`).join('') : '<span class="muted">待安排</span>'}</span><span class="script-cell"><span class="mobile-label">脚本</span>${script}</span><span class="count"><span class="mobile-label">实拍</span>${s.count == null ? '<span class="pending-badge">待填条数</span>' : `${s.count}条`}</span><span class="row-action"><button data-shoot="${esc(s.id)}" aria-label="${data.canEdit ? '编辑' : '查看'}${esc(s.host)}${esc(date)}拍摄"><span aria-hidden="true">›</span></button></span></article>`;
+      return `<article class="shoot-row"><button class="host-button" data-shoot="${esc(s.id)}" aria-label="${esc(date)} ${esc(s.host || '填写排期')}">${esc(s.host || '填写排期')}</button><span class="period-cell"><span class="period-tag">${esc(s.periods.join('、') || '待选时段')}</span></span><span class="photos"><span class="mobile-label">摄影师</span>${s.photographers.length ? s.photographers.map(name => `<span class="person-chip">${esc(name)}</span>`).join('') : '<span class="muted">待安排</span>'}</span><span class="script-cell"><span class="mobile-label">脚本</span>${script}</span><span class="count"><span class="mobile-label">实拍</span>${s.count == null ? '<span class="pending-badge">待填条数</span>' : `${s.count}条`}</span><span class="row-action"><button data-shoot="${esc(s.id)}" aria-label="${data.canEdit ? '编辑' : '查看'}${esc(s.host || '待安排')}${esc(date)}拍摄"><span aria-hidden="true">›</span></button></span></article>`;
     }).join('')}</section>`;
   }).join('');
 }
@@ -115,11 +116,11 @@ function openEditor(shoot) {
   $('editor').dataset.returnFocus = `[data-shoot="${CSS.escape(shoot.id)}"]`;
   baseline = copy(shoot); uncertain = false;
   const draft = shoot, editable = data.canEdit;
-  $('editor-title').textContent = `${draft.host} · 拍摄记录`;
+  $('editor-title').textContent = draft.host ? `${draft.host} · 拍摄记录` : '填写排期';
   $('shoot-date').value = draft.date;
   $('editor').querySelector('.form-grid').inert = false;
   const hosts = [...new Set([...data.hosts.map(h => h.name), draft.host].filter(Boolean))];
-  $('shoot-host').innerHTML = hosts.map(h => `<option>${esc(h)}</option>`).join(''); $('shoot-host').value = draft.host;
+  $('shoot-host').innerHTML = '<option value="">请选择主播</option>' + hosts.map(h => `<option>${esc(h)}</option>`).join(''); $('shoot-host').value = draft.host;
   $('period-choices').innerHTML = PERIODS.map(p => `<label><input type="checkbox" name="period" value="${p}" ${draft.periods.includes(p) ? 'checked' : ''}>${p}</label>`).join('');
   const names = [...new Set([...data.photographers.map(p => p.name), ...draft.photographers])];
   $('photo-choices').innerHTML = names.map(name => `<label><input type="checkbox" name="photographer" value="${esc(name)}" ${draft.photographers.includes(name) ? 'checked' : ''}>${esc(name)}</label>`).join('');
@@ -127,7 +128,7 @@ function openEditor(shoot) {
   $('editor-subtitle').textContent = `${draft.date.slice(5).replace('-', '/')} ${dayName(draft.date)} · ${draft.periods.join('、')}`;
   for (const input of $('shoot-form').querySelectorAll('input,select,textarea')) input.disabled = !editable;
   $('save-shoot').hidden = !editable; $('save-shoot').disabled = false; buttonBusy($('save-shoot'), false, '保存修改');
-  $('cancel-shoot').hidden = !editable || shoot.count != null;
+  $('cancel-shoot').hidden = !editable || !shoot.host || shoot.count != null;
   $('open-base').hidden = preview;
   showError('editor-error'); $('editor').showModal();
 }
@@ -156,7 +157,7 @@ function openSlot(name, date, period) {
   slot = { name, date, period };
   $('slot-context').textContent = `${name} · ${date.slice(5).replace('-', '/')} ${dayName(date)} · ${period}`;
   const leave = data.leaves.has(leaveKey(name, date, period));
-  const candidates = data.shoots.filter(s => s.date === date && s.periods.includes(period));
+  const candidates = data.shoots.filter(s => s.host && s.date === date && s.periods.includes(period));
   $('slot-title').textContent = leave ? '取消这个时段的请假' : '安排这个时段';
   $('slot-existing-label').hidden = leave || !candidates.length; $('slot-existing').hidden = leave;
   $('slot-existing').innerHTML = candidates.map(s => `<article class="existing-session"><div><strong>${esc(s.host)}</strong><small>${esc(s.photographers.join('、') || '待安排')} · ${s.count == null ? '待填条数' : s.count + '条'}</small></div><button class="primary join-button" data-join="${esc(s.id)}" ${!data.canEdit ? 'disabled' : ''} aria-label="加入${esc(s.host)}${date}${period}拍摄">加入</button></article>`).join('') || '<div class="slot-empty"><span aria-hidden="true">＋</span><p>这个时段还没有拍摄场次</p><small>可在「每周排期」建立场次后加入</small></div>';

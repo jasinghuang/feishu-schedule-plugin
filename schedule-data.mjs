@@ -1,4 +1,4 @@
-import { TARGET, addDays, mondayOf, timestamp, text, options, normalizeShoot, sortShoots, inWeek, leaveKey, validateShoot, assignmentProblems, changedKeys, sameValue } from './schedule-core.mjs?v=20261116-links';
+import { TARGET, addDays, mondayOf, timestamp, text, options, normalizeShoot, sortShoots, inWeek, leaveKey, validateShoot, assignmentProblems, changedKeys, sameValue } from './schedule-core.mjs?v=20261123-weekly';
 
 export async function readPages(table, filter) {
   const rows = [];
@@ -74,7 +74,7 @@ export class ScheduleStore {
         if (f[s.leave] === true) leaves.add(key);
       }));
     });
-    return { monday, shoots: sortShoots(rows.map(r => normalizeShoot(r)).filter(s => inWeek(s, monday) && s.host)), photographers, leaves, slotRecords, canEdit, canAdd, canEditRoster, canEditLeave, canAddLeave, hosts: this.selectOptions('host') };
+    return { monday, shoots: sortShoots(rows.map(r => normalizeShoot(r)).filter(s => inWeek(s, monday))), photographers, leaves, slotRecords, canEdit, canAdd, canEditRoster, canEditLeave, canAddLeave, hosts: this.selectOptions('host') };
   }
   selectOptions(key) { return (this.meta.week[TARGET.fields.week[key]].property?.options || []).map(o => ({ id: o.id, name: o.name })).filter(o => o.name); }
   encode(key, value) {

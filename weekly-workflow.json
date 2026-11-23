@@ -1,0 +1,113 @@
+{
+  "title": "每周排期自动建行（每周五17:00生成下周）",
+  "steps": [
+    {
+      "id": "trigger_week",
+      "type": "TimerTrigger",
+      "title": "每周五17:00（北京时间）",
+      "next": "find_missing",
+      "data": {
+        "rule": "WEEKLY",
+        "start_time": "2026-11-27 17:00",
+        "sub_unit": [
+          5
+        ],
+        "is_never_end": true
+      }
+    },
+    {
+      "id": "find_missing",
+      "type": "FindRecordAction",
+      "title": "查找尚无排期的工作日",
+      "next": "loop_missing",
+      "data": {
+        "table_name": "排期生成日历",
+        "field_names": [
+          "工作日序号",
+          "生成日期",
+          "已有排期数"
+        ],
+        "should_proceed_when_no_results": true,
+        "filter_info": {
+          "conjunction": "and",
+          "conditions": [
+            {
+              "field_name": "工作日序号",
+              "operator": "isGreaterEqual",
+              "value": [
+                {
+                  "value_type": "number",
+                  "value": 1
+                }
+              ]
+            },
+            {
+              "field_name": "工作日序号",
+              "operator": "isLessEqual",
+              "value": [
+                {
+                  "value_type": "number",
+                  "value": 5
+                }
+              ]
+            },
+            {
+              "field_name": "已有排期数",
+              "operator": "is",
+              "value": [
+                {
+                  "value_type": "number",
+                  "value": 0
+                }
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "loop_missing",
+      "type": "Loop",
+      "title": "仅为缺失日期建行",
+      "next": null,
+      "children": {
+        "links": [
+          {
+            "kind": "loop_start",
+            "to": "add_blank"
+          }
+        ]
+      },
+      "data": {
+        "loop_mode": "end",
+        "max_loop_times": 5,
+        "data": [
+          {
+            "value_type": "ref",
+            "value": "$.find_missing.fieldRecords"
+          }
+        ]
+      }
+    },
+    {
+      "id": "add_blank",
+      "type": "AddRecordAction",
+      "title": "新增当天空白排期",
+      "next": null,
+      "data": {
+        "table_name": "每周排期",
+        "field_values": [
+          {
+            "field_name": "日期",
+            "value": [
+              {
+                "value_type": "ref",
+                "value": "$.loop_missing.item.flduP6FrRu"
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ]
+}
