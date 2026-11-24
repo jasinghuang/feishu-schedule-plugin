@@ -10,4 +10,4 @@ GitHub Pages 从 main 分支根目录发布，HTML 和同目录模块、CSS、sd
 
 发布前运行 `node --test tests/*.test.mjs`，通过本地合成预览核对拍摄列表、个人排班、加入已有场次、请假/取消请假和共享编辑。发布后核对 GitHub Pages 构建与所有模块 200，再在 v2 内验证真实连接和历史产量。
 
-不得提交真实记录备份、访问令牌、账号缓存或 `.DS_Store`。Base 快照和验收截图保存在工作区的 `output/feishu-schedule/`，不放入公共仓库。
+不得提交真实记录备份、访问令牌、账号缓存或 `.DS_Store`。Base 快照、审计证据和验收截图保存在仓库目录内的 `private/`，该目录由 `.gitignore` 排除，不放入公共仓库，也不要用 `git add -f` 强行加入。
