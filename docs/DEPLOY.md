@@ -2,6 +2,8 @@
 
 GitHub Pages 从 main 分支根目录发布，HTML 和同目录模块、CSS、sdk 必须一起提交。
 
+以下命令均从项目根目录运行。目录组织说明见 [README](../README.md)；`config/` 保存飞书配置定义，移动本地 JSON 不会自动修改线上工作流或字段公式。
+
 正式地址：<https://jasinghuang.github.io/feishu-schedule-plugin/schedule-plugin.html>
 
 当前仅接入 v2 Base `DI51bcg1raS4hasSykacHyRQnrd`，其他 Base 会拒绝连接，避免写错表。
@@ -10,4 +12,4 @@ GitHub Pages 从 main 分支根目录发布，HTML 和同目录模块、CSS、sd
 
 发布前运行 `node --test tests/*.test.mjs`，通过本地合成预览核对拍摄列表、个人排班、加入已有场次、请假/取消请假和共享编辑。发布后核对 GitHub Pages 构建与所有模块 200，再在 v2 内验证真实连接和历史产量。
 
-不得提交真实记录备份、访问令牌、账号缓存或 `.DS_Store`。Base 快照、审计证据和验收截图保存在仓库目录内的 `private/`，该目录由 `.gitignore` 排除，不放入公共仓库，也不要用 `git add -f` 强行加入。
+不得提交真实记录备份、访问令牌、账号缓存或 `.DS_Store`。Base 快照、审计证据和验收截图保存在仓库目录内的 `private/`，分类见本地 `private/README.md`。该目录由 `.gitignore` 排除，不放入公共仓库，也不要用 `git add -f` 强行加入。开发预览仅绑定 `127.0.0.1`；不要将整个项目目录通过公网服务或隧道暴露。

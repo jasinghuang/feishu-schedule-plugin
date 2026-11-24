@@ -24,7 +24,7 @@ IFBLANK([每周排期].FILTER(AND(CurrentValue.[暂定摄影师].CONTAIN(bitable
 
 ## 本周标记
 
-主表 `fld6a6l9OQ` 与档期预约 `fldq9eGhdQ` 使用相同的周一零点至下周一零点范围，包含完整周日；定义保存在 `base-week-markers.json`：
+主表 `fld6a6l9OQ` 与档期预约 `fldq9eGhdQ` 使用相同的周一零点至下周一零点范围，包含完整周日；定义保存在 [base-week-markers.json](../config/base-week-markers.json)：
 
 ```text
 IF([日期]<TODAY()-WEEKDAY(TODAY(),2)+1,"过去",IF([日期]<TODAY()-WEEKDAY(TODAY(),2)+8,"本周","未来"))
@@ -42,7 +42,7 @@ IF(AND(NOT(ISBLANK([日期])),[日期]>=TODAY()-WEEKDAY(TODAY(),2)+8,[日期]<TO
 
 ## 自动化
 
-完成条数与占用使用公式随源数据重算，不需要复制数据的工作流。原每周自动建行工作流 `wkfz1CxnIUc9NKHx` 改为每周五 17:00（Asia/Shanghai）启用执行；定义见 `weekly-workflow.json`。旧档期表的请假和限约守卫保持原状态，不会替主表建立记录或同步主播。
+完成条数与占用使用公式随源数据重算，不需要复制数据的工作流。原每周自动建行工作流 `wkfz1CxnIUc9NKHx` 改为每周五 17:00（Asia/Shanghai）启用执行；定义见 [weekly-workflow.json](../config/weekly-workflow.json)。旧档期表的请假和限约守卫保持原状态，不会替主表建立记录或同步主播。
 
 工作流依赖内部表「排期生成日历」`tbldaAdZL3JsUqyK`：仅五条固定记录，工作日序号 `fldgeFB3PM` 为 1—5；生成日期 `flduP6FrRu` 公式为 `TODAY()-WEEKDAY(TODAY(),2)+7+[工作日序号]`，结果格式必须在原生字段设置里选「日期」。默认公式格式会被工作流认作普通公式值，不能作为日期条件或日期字段输入。CLI 更新表达式后须核对日期格式与工作流校验。
 

@@ -37,6 +37,8 @@
 
 ## 开发与验证
 
+以下命令从项目根目录运行。
+
 ```sh
 node --test tests/*.test.mjs
 python3 -m http.server 8765 --bind 127.0.0.1
@@ -44,14 +46,32 @@ python3 -m http.server 8765 --bind 127.0.0.1
 
 打开 `http://127.0.0.1:8765/schedule-plugin.html?preview=1` 查看纯合成数据演示。演示模式仅允许 localhost/127.0.0.1；正式页面独立打开时明确提示从飞书进入，不会悄悄回退为本地数据。
 
-- `schedule-core.mjs`：日期、占用、校验及去重统计。
-- `schedule-data.mjs`：v2 字段 ID 映射、SDK 权限、分页、读写核验。
-- `schedule-app.mjs` / `schedule.css`：界面和交互，无第三方 UI CDN。
-- `sdk/`：随站点托管的飞书 SDK。
-- `tests/`：合成预览及数据读写回归测试，不含真实 Base 记录。
+## 目录
+
+```text
+feishu-schedule-plugin/
+├── README.md                 项目入口
+├── schedule-plugin.html      飞书注册入口
+├── schedule-app.mjs          界面与交互
+├── schedule-data.mjs         SDK 权限、分页与读写核验
+├── schedule-core.mjs         日期、预约校验与去重统计
+├── schedule.css              界面样式
+├── sdk/                      随站点托管的飞书 SDK
+├── config/                   当前飞书公式与工作流定义
+├── docs/                     Base 配置和发布说明
+├── tests/                    合成预览与回归测试
+└── private/                  本地材料，Git 忽略
+    ├── README.md             私有材料索引
+    ├── backups/              升级与名册迁移前后快照
+    ├── history/              按日期保存的修复、审计与验收记录
+    ├── previews/             历史界面预览
+    └── screenshots/          独立验收截图
+```
+
+运行文件保留在根目录，直接静态发布，无构建步骤或新增运行依赖。`config/` 中的 JSON 是配置记录，须通过飞书维护操作才能应用；插件不会在启动时执行它们。`private/` 含真实记录，不得提交或对外提供静态访问；每次操作的快照、结果及关联预览放在同一个日期主题目录内。
 
 只读取所选周的排期和请假，摄影师名册单独读取；事件变更合并刷新，避免扫描全部历史。
 
-Base 公式与同名引用注意事项见 [BASE_SETUP.md](BASE_SETUP.md)。
+Base 公式与同名引用注意事项见 [Base 配置](docs/BASE_SETUP.md)，上线步骤见 [发布说明](docs/DEPLOY.md)。
 
 界面支持浅色/深色与窄屏排班。选择摄影师和调整上岗分别操作；保存、加入和请假均提供等待反馈，成功提示不改变页面布局，失败保留原弹窗和输入。

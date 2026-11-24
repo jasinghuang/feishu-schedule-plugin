@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { mondayOf, timestamp, addDays } from '../schedule-core.mjs';
 
-const definitions = JSON.parse(await readFile(new URL('../base-week-markers.json',import.meta.url),'utf8'));
+const definitions = JSON.parse(await readFile(new URL('../config/base-week-markers.json',import.meta.url),'utf8'));
 for (const {table_id,field} of definitions) {
   test(`${table_id}: deployed week formula includes Sunday through 23:59:59 and excludes next Monday`, () => {
     // Interpret the formula's actual two date boundaries, including its offset values.
