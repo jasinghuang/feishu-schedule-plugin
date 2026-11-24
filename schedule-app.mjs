@@ -1,12 +1,15 @@
 import { TARGET, PERIODS, addDays, dateKey, mondayOf, weekLabel, dayName, summarize, participantsTotal, occupied, halfDayCount, leaveKey, sortShoots, scriptUrl } from './schedule-core.mjs?v=20261123-leaveweek';
-import { ScheduleStore } from './schedule-data.mjs?v=20261123-leaveweek';
+import { ScheduleStore } from './schedule-data.mjs?v=20261124-refresh';
+import { createRefreshQueue } from './schedule-refresh.mjs?v=20261124-refresh';
 
 const $ = id => document.getElementById(id);
 const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]));
 const preview = ['localhost', '127.0.0.1'].includes(location.hostname) && new URLSearchParams(location.search).has('preview');
 let store, sdk, data, monday = mondayOf(), baseline, slot, loading = 0, unsubscribe;
-let timer, saving = false, uncertain = false, metadataDirty = false;
+let saving = false, uncertain = false;
 let selectedPhotographer = '', noticeTimer;
+const refreshQueue = createRefreshQueue(readWeek, () => saving);
+const refresh = options => refreshQueue.request(options);
 const showError = (id, message = '') => { $(id).textContent = message; $(id).hidden = !message; };
 function notice(message) {
   clearTimeout(noticeTimer); $('notice-text').textContent = message; $('notice').hidden = false;
@@ -86,17 +89,17 @@ function renderRoster() {
   }).join('')}</section>`).join('');
   restoreFocus(focused);
 }
-async function refresh({ metadata = false } = {}) {
+async function readWeek({ metadata = false } = {}) {
   if (!store) return;
-  const version = ++loading;
+  const version = ++loading, requestedMonday = monday;
   buttonBusy($('refresh'), true);
   try {
     if (metadata) await store.init();
-    const next = await store.loadWeek(monday);
-    if (version !== loading) return;
+    const next = await store.loadWeek(requestedMonday);
+    if (version !== loading || requestedMonday !== monday) return;
     data = next; render(); showError('error');
   } catch (e) {
-    if (version === loading) {
+    if (version === loading && requestedMonday === monday) {
       data = undefined;
       showError('error', `读取失败：${e.message}。请刷新重试。`);
       $('export').disabled = true;
@@ -151,7 +154,7 @@ async function save(event) {
   } catch (e) {
     uncertain = Boolean(e.recordId);
     showError('editor-error', e.message);
-  } finally { saving = false; $('save-shoot').disabled = uncertain; $('shoot-form').querySelector('.form-grid').inert = false; buttonBusy($('save-shoot'), false, uncertain ? '请刷新核对' : baseline?.id ? '保存修改' : '新增拍摄'); }
+  } finally { saving = false; refreshQueue.settled(); $('save-shoot').disabled = uncertain; $('shoot-form').querySelector('.form-grid').inert = false; buttonBusy($('save-shoot'), false, uncertain ? '请刷新核对' : baseline?.id ? '保存修改' : '新增拍摄'); }
 }
 function openSlot(name, date, period) {
   if (!data || saving) return;
@@ -179,7 +182,7 @@ async function join(id) {
   } catch (error) {
     if (error.recordId) { $('slot-dialog').close(); await refresh(); showError('error', error.message); }
     else showError('slot-error', error.message);
-  } finally { saving = false; buttonBusy(button, false, '加入'); }
+  } finally { saving = false; refreshQueue.settled(); buttonBusy(button, false, '加入'); }
 }
 function exportWeek() {
   if (!data) return;
@@ -221,7 +224,7 @@ $('cancel-form').onsubmit = async e => {
   const button = $('cancel-form').querySelector('[type=submit]'); buttonBusy(button, true, '取消中…');
   try { await store.removeShoot(baseline); $('cancel-dialog').close(); $('editor').close(); await refresh(); notice('已取消这场拍摄'); }
   catch (error) { $('cancel-dialog').close(); showError('editor-error', error.message); }
-  finally { saving = false; buttonBusy(button, false, '确认取消'); }
+  finally { saving = false; refreshQueue.settled(); buttonBusy(button, false, '确认取消'); }
 };
 $('slot-dialog').addEventListener('cancel', e => { if (saving) e.preventDefault(); });
 $('slot-leave').onclick = async () => {
@@ -230,7 +233,7 @@ $('slot-leave').onclick = async () => {
   saving = true; showError('slot-error'); buttonBusy($('slot-leave'), true, checked ? '设置中…' : '取消中…');
   try { await store.setLeave(slot.name, slot.date, slot.period, checked); $('slot-dialog').close(); await refresh(); notice(checked ? '已标记该时段请假' : '已取消该时段请假'); }
   catch (error) { showError('slot-error', error.message); }
-  finally { saving = false; buttonBusy($('slot-leave'), false, checked ? '设为请假' : '取消请假'); }
+  finally { saving = false; refreshQueue.settled(); buttonBusy($('slot-leave'), false, checked ? '设为请假' : '取消请假'); }
 };
 $('roster').onchange = async e => {
   const input = e.target, id = input.dataset.duty;
@@ -241,9 +244,9 @@ $('roster').onchange = async e => {
   input.setAttribute('aria-disabled', 'true'); input.closest('.roster-person').setAttribute('aria-busy', 'true');
   try { await store.setDuty(id, checked); await refresh(); notice(`${person.name}已设为${checked ? '本周上岗' : '本周轮休'}`); }
   catch (error) { input.checked = !checked; showError('error', error.message); }
-  finally { saving = false; input.removeAttribute('aria-disabled'); input.closest('.roster-person')?.removeAttribute('aria-busy'); }
+  finally { saving = false; refreshQueue.settled(); input.removeAttribute('aria-disabled'); input.closest('.roster-person')?.removeAttribute('aria-busy'); }
 };
-window.addEventListener('pagehide', () => { clearTimeout(timer); clearTimeout(noticeTimer); unsubscribe?.(); });
+window.addEventListener('pagehide', () => { refreshQueue.dispose(); clearTimeout(noticeTimer); unsubscribe?.(); });
 async function start() {
   try {
     if (preview) {
@@ -253,7 +256,7 @@ async function start() {
       sdk = (await import('./sdk/index.mjs')).bitable;
     }
     store = await new ScheduleStore(sdk).init();
-    unsubscribe = store.subscribe(metadata => { metadataDirty ||= metadata; clearTimeout(timer); timer = setTimeout(() => { const dirty = metadataDirty; metadataDirty = false; refresh({ metadata:dirty }); }, 500); });
+    unsubscribe = store.subscribe(metadata => refreshQueue.notify(metadata));
     await refresh();
   } catch (e) {
     $('connection').textContent = '尚未连接飞书'; $('shoot-list').textContent = '请从 v2 Base 的自定义插件打开'; showError('error', e.message); $('refresh').disabled = true;

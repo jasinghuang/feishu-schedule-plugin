@@ -251,3 +251,45 @@ test('Feishu document mentions retain their link when viewing and editing anothe
   assert.equal(scriptUrl('[脚本](data:text/html,bad)'),'');
   assert.equal(normalizeShoot({recordId:'url',fields:{[field]:[{type:'url',text:'脚本文档',link:'https://example.com/doc'}]}}).script,'[脚本文档](https://example.com/doc)');
 });
+
+test('new shoots query only the master for templates and preserve each write permission check', async () => {
+  for (const reuse of [true,false]) {
+    const {sdk,store} = await setup(), fields = TARGET.fields.week, permissions = [];
+    sdk.fixture.rows.week.length = 0;
+    if (reuse) sdk.fixture.rows.week.push({recordId:'template',fields:{[fields.date]:timestamp(monday)}});
+    sdk.base.getPermission = async value => {permissions.push(value);return true;};
+    sdk.fixture.calls.length = 0;
+    await store.saveShoot({id:'',date:monday,host:'主播A',periods:['上午'],photographers:['摄影师丁'],script:'synthetic',count:null});
+    assert.deepEqual(sdk.fixture.calls.map(c=>c.key).sort(),['photo','slots','week','week']);
+    assert.equal(permissions.length,reuse ? 6 : 7);
+    const editableFields = permissions.filter(p=>p.param.fieldId).map(p=>p.param.fieldId).sort();
+    assert.deepEqual(editableFields,(reuse ? [fields.host,fields.periods,fields.photographers,fields.script] : Object.values(fields)).sort());
+    assert.equal(sdk.fixture.writes.length,1);
+  }
+});
+
+test('template lookup never replaces the fresh conflict check before writing', async () => {
+  const {sdk,store} = await setup(), fields = TARGET.fields.week;
+  sdk.fixture.rows.week.length = 0;
+  sdk.fixture.rows.week.push({recordId:'template',fields:{[fields.date]:timestamp(monday)}});
+  const table = sdk.fixture.tables[TARGET.week], read = table.getRecordById;
+  table.getRecordById = async id => {
+    const result = await read(id);
+    sdk.fixture.rows.week.push({recordId:'concurrent',fields:{[fields.date]:timestamp(monday),[fields.host]:{text:'主播B'},[fields.periods]:[{text:'上午'}],[fields.photographers]:[{text:'摄影师丁'}]}});
+    return result;
+  };
+  await assert.rejects(store.saveShoot({id:'',date:monday,host:'主播A',periods:['上午'],photographers:['摄影师丁'],script:'',count:null}),/已安排/);
+  assert.equal(sdk.fixture.writes.length,0);
+});
+
+test('count-only updates keep their narrow read path and leave still checks its cell permission', async () => {
+  const {sdk,store,data} = await setup();
+  sdk.fixture.calls.length = 0;
+  await store.saveShoot({...data.shoots[0],count:20},data.shoots[0]);
+  assert.equal(sdk.fixture.calls.length,0);
+  await store.setLeave('摄影师丁',monday,'上午',true);
+  sdk.base.getPermission = async ({param}) => param.fieldId !== TARGET.fields.slots.leave;
+  const before = sdk.fixture.writes.length;
+  await assert.rejects(store.setLeave('摄影师丁',monday,'上午',false),/权限/);
+  assert.equal(sdk.fixture.writes.length,before);
+});

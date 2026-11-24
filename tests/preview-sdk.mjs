@@ -2,7 +2,14 @@ import { TARGET, PERIODS, DAY_NAMES, mondayOf, addDays, timestamp, dateKey } fro
 
 // Synthetic fixtures only: the public preview never contains Base records or credentials.
 export function previewSdk({ writable = true, baseId = TARGET.base, now = mondayOf() } = {}) {
-  const writes = [], calls = [], listeners = new Set();
+  const writes = [], calls = [], listeners = new Map();
+  const listen = (key, event, callback) => {
+    const channel = `${key}:${event}`;
+    if (!listeners.has(channel)) listeners.set(channel, new Set());
+    listeners.get(channel).add(callback);
+    return () => listeners.get(channel).delete(callback);
+  };
+  const emit = (key, event, data) => listeners.get(`${key}:${event}`)?.forEach(callback => callback({ data }));
   const wk = TARGET.fields.week, ph = TARGET.fields.photo, sl = TARGET.fields.slots;
   const select = names => names.map((name, i) => ({ name, id: `opt${i}` }));
   const meta = {
@@ -17,7 +24,6 @@ export function previewSdk({ writable = true, baseId = TARGET.base, now = monday
     photo:['摄影师甲','摄影师乙','摄影师丙','摄影师丁'].map((name,i)=>({recordId:`photo${i}`,fields:{[ph.name]:[{type:'text',text:name}],[ph.onDuty]:true}})), slots:[]
   };
   let serial = 0;
-  const emit = () => listeners.forEach(fn => fn());
   const tables = Object.fromEntries(Object.keys(rows).map(key => [TARGET[key], {
     async getFieldMetaList() { return structuredClone(meta[key]); },
     async getRecordsByPage(params = {}) {
@@ -31,10 +37,10 @@ export function previewSdk({ writable = true, baseId = TARGET.base, now = monday
       return { records:structuredClone(result.slice(start,end)), hasMore:end < result.length, pageToken:end, total:result.length };
     },
     async getRecordById(id) { const row = rows[key].find(r=>r.recordId===id); if (!row) throw new Error('记录已被删除'); return structuredClone({fields:row.fields}); },
-    async setRecord(id, value) { if (!writable) throw new Error('permission denied'); writes.push({key,id,value:structuredClone(value)}); Object.assign(rows[key].find(r=>r.recordId===id).fields,structuredClone(value.fields)); emit(); return true; },
-    async addRecord(value) { if (!writable) throw new Error('permission denied'); const id = `created${++serial}`; writes.push({key,id,value:structuredClone(value)}); rows[key].push({recordId:id,...structuredClone(value)}); emit(); return id; },
-    async deleteRecord(id) { writes.push({key,id,deleted:true}); rows[key] = rows[key].filter(r=>r.recordId!==id); emit(); return true; },
-    ...Object.fromEntries(['onRecordAdd','onRecordModify','onRecordDelete','onFieldModify'].map(name => [name, fn => { listeners.add(fn); return ()=>listeners.delete(fn); }]))
+    async setRecord(id, value) { if (!writable) throw new Error('permission denied'); writes.push({key,id,value:structuredClone(value)}); Object.assign(rows[key].find(r=>r.recordId===id).fields,structuredClone(value.fields)); emit(key,'onRecordModify',{recordId:id,fieldIds:Object.keys(value.fields)}); return true; },
+    async addRecord(value) { if (!writable) throw new Error('permission denied'); const id = `created${++serial}`; writes.push({key,id,value:structuredClone(value)}); rows[key].push({recordId:id,...structuredClone(value)}); emit(key,'onRecordAdd',[id]); return id; },
+    async deleteRecord(id) { if (!writable) throw new Error('permission denied'); writes.push({key,id,deleted:true}); rows[key] = rows[key].filter(r=>r.recordId!==id); emit(key,'onRecordDelete',[id]); return true; },
+    ...Object.fromEntries(['onRecordAdd','onRecordModify','onRecordDelete','onFieldModify'].map(name => [name, fn => listen(key,name,fn)]))
   }]));
-  return { base:{ async getSelection(){return {baseId};}, async getTableById(id){return tables[id];}, async getPermission(){return writable;}, onPermissionChange(fn){listeners.add(fn);return ()=>listeners.delete(fn);} }, ui:{ async showRecordDetailDialog(){return true;} }, fixture:{rows,meta,writes,calls,tables} };
+  return { base:{ async getSelection(){return {baseId};}, async getTableById(id){return tables[id];}, async getPermission(){return writable;}, onPermissionChange(fn){return listen('base','onPermissionChange',fn);} }, ui:{ async showRecordDetailDialog(){return true;} }, fixture:{rows,meta,writes,calls,tables,emit} };
 }

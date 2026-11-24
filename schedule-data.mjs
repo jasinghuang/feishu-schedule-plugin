@@ -51,13 +51,15 @@ export class ScheduleStore {
       { fieldId, fieldType: 5, operator: 'isLess', value: timestamp(addDays(monday, 7)) }
     ] };
   }
-  async loadWeek(monday) {
-    const [rows, photographerRows, slotRows, canEdit, canAdd, canEditRoster, canEditLeave, canAddLeave] = await Promise.all([
-      readPages(this.tables.week, this.filterWeek(TARGET.fields.week.date, monday)),
+  async readShoots(monday) {
+    const rows = await readPages(this.tables.week, this.filterWeek(TARGET.fields.week.date, monday));
+    return sortShoots(rows.map(r => normalizeShoot(r)).filter(s => inWeek(s, monday)));
+  }
+  async loadWeekData(monday) {
+    const [shoots, photographerRows, slotRows] = await Promise.all([
+      this.readShoots(monday),
       readPages(this.tables.photo),
-      readPages(this.tables.slots, this.filterWeek(TARGET.fields.slots.date, monday)),
-      this.allowed('week', 'editable'), this.allowed('week', 'addable'),
-      this.allowed('photo', 'editable'), this.allowed('slots', 'editable'), this.allowed('slots', 'addable')
+      readPages(this.tables.slots, this.filterWeek(TARGET.fields.slots.date, monday))
     ]);
     const photographers = photographerRows.map(r => ({ id: r.recordId, name: text(r.fields[TARGET.fields.photo.name]).trim(), onDuty: r.fields[TARGET.fields.photo.onDuty] === true })).filter(p => p.name);
     if (new Set(photographers.map(p => p.name)).size !== photographers.length) throw new Error('摄影师表存在重名，请先为摄影师设置唯一姓名');
@@ -74,7 +76,15 @@ export class ScheduleStore {
         if (f[s.leave] === true) leaves.add(key);
       }));
     });
-    return { monday, shoots: sortShoots(rows.map(r => normalizeShoot(r)).filter(s => inWeek(s, monday))), photographers, leaves, slotRecords, canEdit, canAdd, canEditRoster, canEditLeave, canAddLeave, hosts: this.selectOptions('host') };
+    return { monday, shoots, photographers, leaves, slotRecords };
+  }
+  async loadWeek(monday) {
+    const [data, canEdit, canAdd, canEditRoster, canEditLeave, canAddLeave] = await Promise.all([
+      this.loadWeekData(monday),
+      this.allowed('week', 'editable'), this.allowed('week', 'addable'),
+      this.allowed('photo', 'editable'), this.allowed('slots', 'editable'), this.allowed('slots', 'addable')
+    ]);
+    return { ...data, canEdit, canAdd, canEditRoster, canEditLeave, canAddLeave, hosts: this.selectOptions('host') };
   }
   selectOptions(key) { return (this.meta.week[TARGET.fields.week[key]].property?.options || []).map(o => ({ id: o.id, name: o.name })).filter(o => o.name); }
   encode(key, value) {
@@ -96,8 +106,8 @@ export class ScheduleStore {
   async saveShoot(draft, baseline, expectedSlot) {
     validateShoot(draft);
     if (!draft.id) {
-      const current = await this.loadWeek(mondayOf(draft.date));
-      const blank = current.shoots.find(s => s.date === draft.date && !s.host && !s.periods.length && !s.photographers.length && !s.script && s.count == null);
+      const shoots = await this.readShoots(mondayOf(draft.date));
+      const blank = shoots.find(s => s.date === draft.date && !s.host && !s.periods.length && !s.photographers.length && !s.script && s.count == null);
       // Consume an untouched date template before adding another row for that day.
       if (blank && await this.allowed('week', 'editable', blank.id)) return this.saveShoot({ ...draft, id: blank.id }, blank);
     }
@@ -113,7 +123,7 @@ export class ScheduleStore {
     } else await this.requirePermission('week', 'addable');
     for (const key of keys) await this.requirePermission('week', 'editable', draft.id || undefined, TARGET.fields.week[key]);
     if (keys.some(key => ['date', 'periods', 'photographers', 'host'].includes(key))) {
-      const current = await this.loadWeek(mondayOf(draft.date));
+      const current = await this.loadWeekData(mondayOf(draft.date));
       const addedNames = draft.photographers.filter(name => !baseline?.photographers.includes(name));
       if (addedNames.some(name => !current.photographers.some(p => p.name === name))) throw new Error('参与摄影师须来自摄影师表，请刷新名单后重试');
       const problems = assignmentProblems(draft, current.shoots, current.photographers, current.leaves);
@@ -153,7 +163,7 @@ export class ScheduleStore {
     return this.saveShoot({ ...shoot, photographers: [...shoot.photographers, name] }, shoot, { date, period });
   }
   async setLeave(name, date, period, checked) {
-    const current = await this.loadWeek(mondayOf(date));
+    const current = await this.loadWeekData(mondayOf(date));
     const photographer = current.photographers.find(p => p.name === name);
     if (!photographer) throw new Error('摄影师已不在摄影师表中，请刷新后重试');
     const conflicts = current.shoots.filter(s => s.date === date && s.periods.includes(period) && s.photographers.includes(name));
