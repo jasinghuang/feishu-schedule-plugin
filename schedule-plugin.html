@@ -3,9 +3,9 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="color-scheme" content="light dark">
+  <meta name="color-scheme" content="only light">
   <title>拍摄排期 · v2</title>
-  <link rel="stylesheet" href="./schedule.css?v=20261116-studio2">
+  <link rel="stylesheet" href="./schedule.css?v=20261124-wise-ink">
 </head>
 <body>
   <main class="app">
@@ -18,7 +18,7 @@
       <div class="actions"><button id="refresh" class="quiet" aria-label="刷新排期" title="刷新排期"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M20 7v5h-5M4 17v-5h5M6 7a7 7 0 0 1 12-1l2 3M4 15l2 3a7 7 0 0 0 12-1"/></svg><span>刷新</span></button></div>
     </div>
     <div id="error" class="error-banner" role="alert" hidden></div>
-    <div class="view-bar"><div class="tabs" role="tablist" aria-label="排期查看方式"><button id="shoot-tab" class="selected" role="tab" aria-selected="true" aria-controls="shoot-panel">按拍摄查看</button><button id="roster-tab" role="tab" aria-selected="false" aria-controls="roster-panel" tabindex="-1">摄影师排班</button></div><div class="actions"><button id="new-shoot" class="primary" hidden>新增拍摄</button><button id="export" class="quiet" disabled>导出本周</button></div></div>
+    <div class="view-bar"><div class="tabs" role="tablist" aria-label="排期查看方式"><button id="shoot-tab" class="selected" role="tab" aria-selected="true" aria-controls="shoot-panel">按拍摄查看</button><button id="roster-tab" role="tab" aria-selected="false" aria-controls="roster-panel" tabindex="-1">摄影师排班</button></div><div class="actions"><button id="export" class="quiet" disabled>导出本周</button></div></div>
     <section id="shoot-panel" role="tabpanel" aria-labelledby="shoot-tab"><div id="shoot-list" class="empty">正在读取排期…</div></section>
     <section id="roster-panel" role="tabpanel" aria-labelledby="roster-tab" hidden><div class="roster-layout"><aside class="roster-sidebar" aria-label="选择摄影师及调整本周上岗"><div class="roster-heading"><h2>摄影师</h2><span id="duty-label" class="muted">本周上岗</span></div><div id="roster"></div></aside><div class="personal-schedule"><header class="personal-heading"><h2 id="photographer-name"></h2><div id="photographer-total" class="personal-metrics"></div></header><div id="day-grid" class="day-grid"></div></div></div></section>
   </main>
@@ -41,6 +41,6 @@
   </dialog>
   <dialog id="slot-dialog" aria-labelledby="slot-title" aria-describedby="slot-context"><header class="dialog-header"><div><h2 id="slot-title">安排时段</h2><p id="slot-context" class="muted"></p></div><button data-close="slot-dialog" class="icon-button" aria-label="关闭时段设置">×</button></header><div class="slot-options"><h3 id="slot-existing-label">加入已有场次</h3><div id="slot-existing"></div><div class="leave-action"><button id="slot-leave">设为请假</button></div><p id="slot-error" class="form-error" role="alert" hidden></p></div></dialog>
   <dialog id="cancel-dialog" aria-labelledby="cancel-title"><form id="cancel-form"><header class="dialog-header"><h2 id="cancel-title">取消这场拍摄？</h2></header><p>取消后会删除这条未填报拍摄记录，并释放全部参与摄影师的时段。</p><footer class="dialog-footer"><button type="button" data-close="cancel-dialog">保留拍摄</button><button type="submit" class="danger">确认取消</button></footer></form></dialog>
-  <script type="module" src="./schedule-app.mjs?v=20261124-refresh"></script>
+  <script type="module" src="./schedule-app.mjs?v=20261124-daily-ui3"></script>
 </body>
 </html>

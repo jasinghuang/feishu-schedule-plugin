@@ -24,14 +24,14 @@ function focusedControl() {
   const element = document.activeElement;
   if (!$('roster-panel').contains(element) && !$('shoot-panel').contains(element)) return '';
   if (element.dataset.slotName) return ['name', 'date', 'period'].map(key => `[data-slot-${key}="${CSS.escape(element.dataset['slot' + key[0].toUpperCase() + key.slice(1)])}"]`).join('');
-  for (const key of ['photographer', 'duty', 'shoot']) if (element.dataset[key]) return `[data-${key}="${CSS.escape(element.dataset[key])}"]`;
+  for (const key of ['photographer', 'duty', 'shoot', 'newShoot']) if (element.dataset[key]) return `[data-${key.replace(/[A-Z]/g, c => '-' + c.toLowerCase())}="${CSS.escape(element.dataset[key])}"]`;
   return '';
 }
 function restoreFocus(selector) {
   // Live updates can replace the button that opened a dialog.
   if (selector && document.activeElement === document.body) {
     const panel = $('shoot-panel').hidden ? $('roster-panel') : $('shoot-panel');
-    (panel.querySelector(selector) || (selector === '#new-shoot' && $('new-shoot')) || $(panel.id === 'shoot-panel' ? 'shoot-tab' : 'roster-tab')).focus({ preventScroll:true });
+    (panel.querySelector(selector) || $(panel.id === 'shoot-panel' ? 'shoot-tab' : 'roster-tab')).focus({ preventScroll:true });
   }
 }
 const copy = object => structuredClone(object);
@@ -48,21 +48,20 @@ function render() {
   $('total-meta').textContent = `${totals.sessions}场拍摄${totals.unreported ? ` · ${totals.unreported}场待填条数` : totals.sessions ? ' · 已全部填报' : ''}${pending ? ` · ${pending}条待安排` : ''}`;
   $('connection').textContent = preview ? '演示数据 · 不写入飞书' : `飞书已连接${data.canEdit ? '' : ' · 只读'}`;
   $('export').disabled = false;
-  $('new-shoot').hidden = $('shoot-panel').hidden || !data.canAdd;
   $('week-range').textContent = `${monday.replaceAll('-', '/')} — ${addDays(monday, 6).replaceAll('-', '/')}`;
   renderShoots(); renderRoster(); restoreFocus(focused);
 }
 function renderShoots() {
-  if (!data.shoots.length) { $('shoot-list').className = 'empty'; $('shoot-list').textContent = '这一周还没有拍摄安排'; return; }
   $('shoot-list').className = 'shoot-board';
-  const dates = [...new Set(data.shoots.map(s => s.date))];
+  const dates = [...new Set([...Array.from({ length:5 }, (_, i) => addDays(monday, i)), ...data.shoots.map(s => s.date)])].sort();
+  const today = dateKey(Date.now());
   $('shoot-list').innerHTML = '<div class="shoot-heading" aria-hidden="true"><span>主播</span><span>时段</span><span>参与摄影师</span><span>脚本</span><span class="count">实拍条数</span><span></span></div>' + dates.map(date => {
     const shoots = data.shoots.filter(s => s.date === date);
-    return `<section class="day-group"><header class="day-heading"><h3>${dayName(date)} · ${date.slice(5).replace('-', '/')}</h3><span>${shoots.filter(s => s.host).length}场</span></header>${shoots.map(s => {
+    return `<section class="day-group${date === today ? ' today' : ''}" aria-labelledby="day-${date}"><header class="day-heading"><div class="day-title"><h3 id="day-${date}">${dayName(date)}<span class="day-date">${date.slice(5).replace('-', '/')}</span></h3>${date === today ? '<span class="today-tag">今天</span>' : ''}<span class="day-count">${shoots.filter(s => s.host).length}场</span></div>${data.canAdd ? `<button type="button" class="add-shoot" data-new-shoot="${date}" aria-label="${date} ${dayName(date)}新增拍摄"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>新增拍摄</button>` : ''}</header>${shoots.map(s => {
       const url = scriptUrl(s.script);
       const script = url ? `<a href="${esc(url)}" target="_blank" rel="noopener noreferrer" title="${esc(s.script)}">查看脚本 ↗</a>` : `<span title="${esc(s.script)}">${esc(s.script || '待提供')}</span>`;
       return `<article class="shoot-row"><button class="host-button" data-shoot="${esc(s.id)}" aria-label="${esc(date)} ${esc(s.host || '填写排期')}">${esc(s.host || '填写排期')}</button><span class="period-cell"><span class="period-tag">${esc(s.periods.join('、') || '待选时段')}</span></span><span class="photos"><span class="mobile-label">摄影师</span>${s.photographers.length ? s.photographers.map(name => `<span class="person-chip">${esc(name)}</span>`).join('') : '<span class="muted">待安排</span>'}</span><span class="script-cell"><span class="mobile-label">脚本</span>${script}</span><span class="count"><span class="mobile-label">实拍</span>${s.count == null ? '<span class="pending-badge">待填条数</span>' : `${s.count}条`}</span><span class="row-action"><button data-shoot="${esc(s.id)}" aria-label="${data.canEdit ? '编辑' : '查看'}${esc(s.host || '待安排')}${esc(date)}拍摄"><span aria-hidden="true">›</span></button></span></article>`;
-    }).join('')}</section>`;
+    }).join('') || '<p class="day-empty">当天暂无拍摄安排</p>'}</section>`;
   }).join('');
 }
 function renderRoster() {
@@ -111,14 +110,13 @@ async function readWeek({ metadata = false } = {}) {
 async function changeWeek(date) { if (!date || saving) return; clearTimeout(noticeTimer); $('notice').hidden = true; monday = mondayOf(date); await refresh(); }
 function switchView(roster) {
   $('shoot-panel').hidden = roster; $('roster-panel').hidden = !roster;
-  $('new-shoot').hidden = roster || !data?.canAdd;
   for (const [id, selected] of [['shoot-tab', !roster], ['roster-tab', roster]]) {
     $(id).classList.toggle('selected', selected); $(id).setAttribute('aria-selected', selected); $(id).tabIndex = selected ? 0 : -1;
   }
 }
 function openEditor(shoot) {
   if (!data || !shoot || saving) return;
-  $('editor').dataset.returnFocus = shoot.id ? `[data-shoot="${CSS.escape(shoot.id)}"]` : '#new-shoot';
+  $('editor').dataset.returnFocus = shoot.id ? `[data-shoot="${CSS.escape(shoot.id)}"]` : `[data-new-shoot="${shoot.date}"]`;
   baseline = copy(shoot); uncertain = false;
   const draft = shoot, editable = shoot.id ? data.canEdit : data.canAdd;
   $('editor-title').textContent = !draft.id ? '新增拍摄' : draft.host ? `${draft.host} · 拍摄记录` : '填写排期';
@@ -165,7 +163,7 @@ function openSlot(name, date, period) {
   const candidates = data.shoots.filter(s => s.host && s.date === date && s.periods.includes(period));
   $('slot-title').textContent = leave ? '取消这个时段的请假' : '安排这个时段';
   $('slot-existing-label').hidden = leave || !candidates.length; $('slot-existing').hidden = leave;
-  $('slot-existing').innerHTML = candidates.map(s => `<article class="existing-session"><div><strong>${esc(s.host)}</strong><small>${esc(s.photographers.join('、') || '待安排')} · ${s.count == null ? '待填条数' : s.count + '条'}</small></div><button class="primary join-button" data-join="${esc(s.id)}" ${!data.canEdit ? 'disabled' : ''} aria-label="加入${esc(s.host)}${date}${period}拍摄">加入</button></article>`).join('') || '<div class="slot-empty"><span aria-hidden="true">＋</span><p>这个时段还没有拍摄场次</p><small>可在「每周排期」建立场次后加入</small></div>';
+  $('slot-existing').innerHTML = candidates.map(s => `<article class="existing-session"><div><strong>${esc(s.host)}</strong><small>${esc(s.photographers.join('、') || '待安排')} · ${s.count == null ? '待填条数' : s.count + '条'}</small></div><button class="primary join-button" data-join="${esc(s.id)}" ${!data.canEdit ? 'disabled' : ''} aria-label="加入${esc(s.host)}${date}${period}拍摄">加入</button></article>`).join('') || '<div class="slot-empty"><span aria-hidden="true">＋</span><p>这个时段还没有拍摄场次</p><small>在「按拍摄查看」对应日期新增拍摄后，可在这里加入</small></div>';
   $('slot-leave').textContent = leave ? '取消请假' : '设为请假';
   $('slot-leave').classList.toggle('primary', leave);
   $('slot-leave').disabled = leave ? !data.canEditLeave : data.slotRecords.has(leaveKey(name, date, period)) ? !data.canEditLeave : !data.canAddLeave;
@@ -201,13 +199,10 @@ $('dismiss-notice').onclick = () => { clearTimeout(noticeTimer); $('notice').hid
 $('shoot-tab').onclick = () => switchView(false); $('roster-tab').onclick = () => switchView(true);
 for (const id of ['shoot-tab','roster-tab']) $(id).onkeydown = e => { if (['ArrowLeft','ArrowRight','Home','End'].includes(e.key)) { e.preventDefault(); const roster = e.key === 'End' || (e.key !== 'Home' && id === 'shoot-tab'); switchView(roster); $(roster ? 'roster-tab' : 'shoot-tab').focus(); } };
 $('shoot-form').onsubmit = save; $('export').onclick = exportWeek;
-$('new-shoot').onclick = () => {
-  if (!data?.canAdd || saving) return;
-  const today = dateKey(Date.now());
-  openEditor({ id:'', date:mondayOf(today) === monday ? today : monday, host:'', periods:[], photographers:[], script:'', count:null });
-};
 document.addEventListener('click', e => {
   if (saving) return;
+  const adding = e.target.closest('[data-new-shoot]');
+  if (adding && data?.canAdd) openEditor({ id:'', date:adding.dataset.newShoot, host:'', periods:[], photographers:[], script:'', count:null });
   const person = e.target.closest('[data-photographer]'); if (person && data) { selectedPhotographer = person.dataset.photographer; renderRoster(); }
   const joining = e.target.closest('[data-join]'); if (joining) join(joining.dataset.join);
   const close = e.target.closest('[data-close]'); if (close && !saving) $(close.dataset.close).close();
