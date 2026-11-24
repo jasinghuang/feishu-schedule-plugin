@@ -127,10 +127,10 @@ h3 { font-size:14px; font-weight:600; }
 .schedule-day h3 small { display:block; font-size:11px; font-weight:400; color:var(--muted); }
 .schedule-day.today h3 { color:var(--booked-ink); }
 .schedule-slot { display:flex; flex-direction:column; align-items:center; justify-content:center; gap:5px; width:100%; min-height:var(--slot-height); margin:0; padding:10px 5px; border:1px solid var(--line); border-radius:7px; background:var(--surface); white-space:normal; overflow-wrap:anywhere; font-size:13px; font-weight:500; }
-.schedule-slot>.slot-period { display:none; font-size:10px; color:var(--muted); font-weight:400; }
+.schedule-slot>.slot-period { display:none; font-size:11px; color:var(--muted); font-weight:400; }
 .schedule-slot .plus { color:var(--muted); font-size:21px; font-weight:400; line-height:1; }
 .schedule-slot.open { background:var(--surface); border-style:dashed; border-color:var(--line); }
-.schedule-slot.booked { background:var(--booked); border-color:var(--booked-line); border-left:3px solid var(--booked-line); }
+.schedule-slot.booked { background:var(--booked); border-color:var(--booked-line); }
 .schedule-slot.booked button { flex-direction:column; width:100%; gap:4px; min-height:49px; padding:1px; border:0; background:transparent; box-shadow:none; color:var(--booked-ink); white-space:normal; }
 .schedule-slot.booked button small { font-size:11px; color:var(--muted); font-weight:400; }
 .schedule-slot.leave { color:var(--muted); background:var(--soft); border-color:transparent; }
@@ -212,7 +212,7 @@ legend { font-size:12px; font-weight:500; padding:0; margin-bottom:7px; }
  .app-header { align-items:flex-start; gap:14px; }
  .week-total { display:flex; flex-direction:column; align-items:flex-end; flex-shrink:0; gap:3px; max-width:145px; }
  .week-total strong { font-size:29px; }
- #total-meta { margin-top:0; font-size:10px; }
+ #total-meta { margin-top:0; font-size:11px; }
  .toolbar { align-items:center; gap:5px; padding:8px 0 10px; }
  .week-navigation { flex-direction:column; align-items:flex-start; gap:3px; }
  .week-picker { min-width:128px; font-size:12px; }
@@ -249,7 +249,7 @@ legend { font-size:12px; font-weight:500; padding:0; margin-bottom:7px; }
  .schedule-day { display:grid; grid-row:auto; grid-template-columns:36px minmax(0,1fr) minmax(0,1fr); grid-template-rows:auto; gap:7px; align-items:stretch; }
  .schedule-day h3 { text-align:left; margin:0; }
  .schedule-slot>.slot-period { display:block; }
- .connection { max-width:120px; font-size:10px; }
+ .connection { max-width:120px; font-size:11px; }
  .week-total { max-width:130px; }
 }
 @media(pointer:coarse) { .duty-switch { width:44px; } button { min-height:44px; } input,select,textarea { font-size:16px; } .choices label { min-height:44px; } }
