@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { TARGET, summarize, participantsTotal, occupied, mondayOf, addDays, dateKey, timestamp, assignmentProblems, validateShoot, scriptUrl, normalizeShoot, isWorkday, shouldKeepDateRow } from '../schedule-core.mjs';
+import { TARGET, summarize, participantsTotal, occupied, mondayOf, addDays, dateKey, timestamp, assignmentProblems, validateShoot, scriptUrl, normalizeShoot, isWorkday, isBlankDateRow, shouldKeepDateRow } from '../schedule-core.mjs';
 import { ScheduleStore, readPages } from '../schedule-data.mjs';
 import { previewSdk } from './preview-sdk.mjs';
 
@@ -330,6 +330,9 @@ test('deleting the only shoot on a workday clears shoot fields and preserves the
   assert.deepEqual(data.shoots[0].photographers, []);
   assert.equal(data.shoots[0].script, '');
   assert.equal(data.shoots[0].count, null);
+  assert.equal(isBlankDateRow(data.shoots[0]), true);
+  assert.equal(isBlankDateRow({ ...data.shoots[0], script:'准备草稿' }), false);
+  assert.equal(isBlankDateRow({ ...data.shoots[0], host:'主播A' }), false);
   assert.deepEqual(summarize(data.shoots), { sessions:0, count:0, unreported:0 });
   assert.deepEqual(occupied(data.shoots, '摄影师丁', monday, '上午'), []);
   // A subsequent new shoot on that workday reuses the preserved blank row.

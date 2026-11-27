@@ -51,6 +51,9 @@ export function isWorkday(date) {
   const day = new Date(`${date}T12:00:00Z`).getUTCDay();
   return day >= 1 && day <= 5;
 }
+export function isBlankDateRow(shoot) {
+  return Boolean(shoot?.date) && !shoot.host && !shoot.periods.length && !shoot.photographers.length && !shoot.script && shoot.count == null;
+}
 export function shouldKeepDateRow(shoot, shoots) {
   if (!shoot?.date || !isWorkday(shoot.date)) return false;
   return shoots.filter(s => s.date === shoot.date).length <= 1;

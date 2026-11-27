@@ -1,5 +1,5 @@
-import { TARGET, PERIODS, addDays, dateKey, mondayOf, weekLabel, dayName, summarize, participantsTotal, occupied, halfDayCount, leaveKey, sortShoots, scriptUrl, shouldKeepDateRow } from './schedule-core.mjs?v=20261127-delete-slot';
-import { ScheduleStore } from './schedule-data.mjs?v=20261127-delete-slot';
+import { TARGET, PERIODS, addDays, dateKey, mondayOf, weekLabel, dayName, summarize, participantsTotal, occupied, halfDayCount, leaveKey, sortShoots, scriptUrl, isBlankDateRow, shouldKeepDateRow } from './schedule-core.mjs?v=20261127-blank-empty';
+import { ScheduleStore } from './schedule-data.mjs?v=20261127-blank-empty';
 import { createRefreshQueue } from './schedule-refresh.mjs?v=20261124-refresh';
 
 const $ = id => document.getElementById(id);
@@ -42,7 +42,7 @@ function canRemoveShoot(shoot) {
 
 function render() {
   const focused = focusedControl(), totals = summarize(data.shoots);
-  const pending = data.shoots.filter(s => !s.host).length;
+  const pending = data.shoots.filter(s => !s.host && !isBlankDateRow(s)).length;
   $('week-label').textContent = `${monday === mondayOf() ? '本周 · ' : ''}${weekLabel(monday).replace(/^\d{4}年/, '')}`;
   $('week-date').value = monday;
   $('total-label').textContent = monday === mondayOf() ? '本周实拍' : '该周实拍';
@@ -57,10 +57,11 @@ function render() {
 }
 function renderShoots() {
   $('shoot-list').className = 'shoot-board';
-  const dates = [...new Set([...Array.from({ length:5 }, (_, i) => addDays(monday, i)), ...data.shoots.map(s => s.date)])].sort();
+  const visibleShoots = data.shoots.filter(s => !isBlankDateRow(s));
+  const dates = [...new Set([...Array.from({ length:5 }, (_, i) => addDays(monday, i)), ...visibleShoots.map(s => s.date)])].sort();
   const today = dateKey(Date.now());
   $('shoot-list').innerHTML = '<div class="shoot-heading" aria-hidden="true"><span>主播</span><span>时段</span><span>参与摄影师</span><span>脚本</span><span class="count">实拍条数</span><span></span></div>' + dates.map(date => {
-    const shoots = data.shoots.filter(s => s.date === date);
+    const shoots = visibleShoots.filter(s => s.date === date);
     return `<section class="day-group${date === today ? ' today' : ''}" aria-labelledby="day-${date}"><header class="day-heading"><div class="day-title"><h3 id="day-${date}">${dayName(date)}<span class="day-date">${date.slice(5).replace('-', '/')}</span></h3>${date === today ? '<span class="today-tag">今天</span>' : ''}<span class="day-count">${shoots.filter(s => s.host).length}场</span></div>${data.canAdd ? `<button type="button" class="add-shoot" data-new-shoot="${date}" aria-label="${date} ${dayName(date)}新增拍摄"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>新增拍摄</button>` : ''}</header>${shoots.map(s => {
       const url = scriptUrl(s.script);
       const script = url ? `<a href="${esc(url)}" target="_blank" rel="noopener noreferrer" title="${esc(s.script)}">查看脚本 ↗</a>` : `<span title="${esc(s.script)}">${esc(s.script || '待提供')}</span>`;
@@ -215,7 +216,7 @@ async function join(id) {
 function exportWeek() {
   if (!data) return;
   const cell = value => '"' + String(value ?? '').replace(/^[=+@-]/, "'$&").replaceAll('"', '""') + '"';
-  const rows = [['日期','星期','时间段','主播','参与摄影师','脚本','实拍条数'], ...sortShoots(data.shoots).map(s => [s.date,dayName(s.date),s.periods.join('、'),s.host,s.photographers.join('、'),s.script,s.count])];
+  const rows = [['日期','星期','时间段','主播','参与摄影师','脚本','实拍条数'], ...sortShoots(data.shoots.filter(s => !isBlankDateRow(s))).map(s => [s.date,dayName(s.date),s.periods.join('、'),s.host,s.photographers.join('、'),s.script,s.count])];
   const blob = new Blob(['\uFEFF' + rows.map(r => r.map(cell).join(',')).join('\r\n')], { type:'text/csv;charset=utf-8' });
   const url = URL.createObjectURL(blob), a = document.createElement('a'); a.href = url; a.download = `拍摄排期-${monday}.csv`; a.click(); setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
