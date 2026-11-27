@@ -1,0 +1,103 @@
+{
+  "title": "删除该场次（清空未填报排期并保留日期）",
+  "steps": [
+    {
+      "id": "trigger_delete",
+      "type": "ButtonTrigger",
+      "title": "点击「删除该场次」按钮时触发",
+      "next": "check_unreported",
+      "data": {
+        "button_type": "buttonField",
+        "table_name": "每周排期"
+      }
+    },
+    {
+      "id": "check_unreported",
+      "type": "IfElseBranch",
+      "title": "仅处理未填报实拍条数的场次",
+      "next": null,
+      "children": {
+        "links": [
+          {
+            "kind": "if_true",
+            "to": "clear_shoot"
+          },
+          {
+            "kind": "if_false",
+            "to": ""
+          }
+        ]
+      },
+      "data": {
+        "condition": {
+          "conjunction": "or",
+          "conditions": [
+            {
+              "conjunction": "and",
+              "conditions": [
+                {
+                  "left_value": {
+                    "value_type": "ref",
+                    "value": "$.trigger_delete.fld8r4f6j5"
+                  },
+                  "operator": "isEmpty",
+                  "right_value": []
+                }
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "clear_shoot",
+      "type": "SetRecordAction",
+      "title": "清空拍摄场次并保留日期",
+      "next": null,
+      "data": {
+        "table_name": "每周排期",
+        "ref_info": {
+          "step_id": "trigger_delete"
+        },
+        "field_values": [
+          {
+            "field_name": "主播名字",
+            "value": [
+              {
+                "value_type": "ref",
+                "value": "$.trigger_delete.fld8r4f6j5"
+              }
+            ]
+          },
+          {
+            "field_name": "时间段",
+            "value": [
+              {
+                "value_type": "ref",
+                "value": "$.trigger_delete.fld8r4f6j5"
+              }
+            ]
+          },
+          {
+            "field_name": "暂定摄影师",
+            "value": [
+              {
+                "value_type": "ref",
+                "value": "$.trigger_delete.fld8r4f6j5"
+              }
+            ]
+          },
+          {
+            "field_name": "脚本",
+            "value": [
+              {
+                "value_type": "text",
+                "value": ""
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ]
+}

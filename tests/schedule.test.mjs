@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { TARGET, summarize, participantsTotal, occupied, mondayOf, addDays, dateKey, timestamp, assignmentProblems, validateShoot, scriptUrl, normalizeShoot } from '../schedule-core.mjs';
+import { TARGET, summarize, participantsTotal, occupied, mondayOf, addDays, dateKey, timestamp, assignmentProblems, validateShoot, scriptUrl, normalizeShoot, isWorkday, shouldKeepDateRow } from '../schedule-core.mjs';
 import { ScheduleStore, readPages } from '../schedule-data.mjs';
 import { previewSdk } from './preview-sdk.mjs';
 
@@ -292,4 +292,97 @@ test('count-only updates keep their narrow read path and leave still checks its 
   const before = sdk.fixture.writes.length;
   await assert.rejects(store.setLeave('摄影师丁',monday,'上午',false),/权限/);
   assert.equal(sdk.fixture.writes.length,before);
+});
+
+test('deleting the only shoot on a workday clears shoot fields and preserves the date slot row', async () => {
+  const {sdk,store} = await setup();
+  const fields = TARGET.fields.week;
+  sdk.fixture.rows.week.length = 0;
+  sdk.fixture.rows.week.push({
+    recordId:'only-monday',
+    fields:{
+      [fields.date]:timestamp(monday),
+      [fields.host]:{text:'主播A'},
+      [fields.periods]:[{text:'上午'}],
+      [fields.photographers]:[{text:'摄影师丁'}],
+      [fields.script]:[{type:'text',text:'原脚本'}],
+      [fields.count]:null
+    }
+  });
+  // Clearing the last workday row only needs editable permission, not deletable.
+  sdk.base.getPermission = async ({type}) => type !== 'deletable';
+  let data = await store.loadWeek(monday);
+  assert.equal(data.canEdit, true);
+  assert.equal(data.canDelete, false);
+  const shoot = data.shoots[0];
+  assert.equal(shouldKeepDateRow(shoot, data.shoots), true);
+  const result = await store.removeShoot(shoot);
+  assert.deepEqual(result, { mode:'cleared', id:'only-monday' });
+  assert.equal(sdk.fixture.rows.week.length, 1);
+  assert.equal(sdk.fixture.writes.length, 1);
+  assert.equal(sdk.fixture.writes[0].deleted, undefined);
+  data = await store.loadWeek(monday);
+  assert.equal(data.shoots.length, 1);
+  assert.equal(data.shoots[0].id, 'only-monday');
+  assert.equal(data.shoots[0].date, monday);
+  assert.equal(data.shoots[0].host, '');
+  assert.deepEqual(data.shoots[0].periods, []);
+  assert.deepEqual(data.shoots[0].photographers, []);
+  assert.equal(data.shoots[0].script, '');
+  assert.equal(data.shoots[0].count, null);
+  assert.deepEqual(summarize(data.shoots), { sessions:0, count:0, unreported:0 });
+  assert.deepEqual(occupied(data.shoots, '摄影师丁', monday, '上午'), []);
+  // A subsequent new shoot on that workday reuses the preserved blank row.
+  const reusedId = await store.saveShoot({ id:'', date:monday, host:'主播B', periods:['下午'], photographers:['摄影师丙'], script:'新场次', count:null });
+  assert.equal(reusedId, 'only-monday');
+  assert.equal(sdk.fixture.rows.week.length, 1);
+});
+
+test('deleting one of multiple shoots on a workday or a weekend shoot deletes the record directly', async () => {
+  const {sdk,store} = await setup();
+  const fields = TARGET.fields.week;
+  const saturday = addDays(monday, 5);
+  assert.equal(isWorkday(monday), true);
+  assert.equal(isWorkday(saturday), false);
+  sdk.fixture.rows.week.push(
+    { recordId:'mon-1', fields:{ [fields.date]:timestamp(monday), [fields.host]:{text:'主播A'}, [fields.periods]:[{text:'上午'}], [fields.photographers]:[{text:'摄影师甲'}], [fields.script]:[{type:'text',text:'s1'}], [fields.count]:null } },
+    { recordId:'mon-2', fields:{ [fields.date]:timestamp(monday), [fields.host]:{text:'主播B'}, [fields.periods]:[{text:'下午'}], [fields.photographers]:[{text:'摄影师丙'}], [fields.script]:[{type:'text',text:'s2'}], [fields.count]:null } },
+    { recordId:'sat-1', fields:{ [fields.date]:timestamp(saturday), [fields.host]:{text:'主播A'}, [fields.periods]:[{text:'上午'}], [fields.photographers]:[{text:'摄影师丁'}], [fields.script]:null, [fields.count]:null } }
+  );
+  let data = await store.loadWeek(monday);
+  const mon1 = data.shoots.find(s => s.id === 'mon-1');
+  const sat1 = data.shoots.find(s => s.id === 'sat-1');
+  assert.equal(shouldKeepDateRow(mon1, data.shoots), false);
+  assert.equal(shouldKeepDateRow(sat1, data.shoots), false);
+  assert.deepEqual(await store.removeShoot(mon1), { mode:'deleted', id:'mon-1' });
+  assert.deepEqual(await store.removeShoot(sat1), { mode:'deleted', id:'sat-1' });
+  data = await store.loadWeek(monday);
+  assert.ok(!data.shoots.some(s => s.id === 'mon-1'));
+  assert.ok(!data.shoots.some(s => s.id === 'sat-1'));
+  assert.ok(data.shoots.some(s => s.id === 'mon-2'));
+  // Now mon-2 is the sole row on Monday, so deleting it preserves the Monday date row.
+  const mon2 = data.shoots.find(s => s.id === 'mon-2');
+  assert.deepEqual(await store.removeShoot(mon2), { mode:'cleared', id:'mon-2' });
+  data = await store.loadWeek(monday);
+  const preserved = data.shoots.find(s => s.id === 'mon-2');
+  assert.ok(preserved);
+  assert.equal(preserved.date, monday);
+  assert.equal(preserved.host, '');
+});
+
+test('zero-count shoots, blank rows, and field-locked clears are rejected without writing', async () => {
+  const {sdk,store} = await setup();
+  const fields = TARGET.fields.week;
+  sdk.fixture.rows.week.length = 0;
+  sdk.fixture.rows.week.push(
+    { recordId:'zero-count', fields:{ [fields.date]:timestamp(monday), [fields.host]:{text:'主播A'}, [fields.periods]:[{text:'上午'}], [fields.count]:0 } },
+    { recordId:'blank-row', fields:{ [fields.date]:timestamp(addDays(monday,1)) } },
+    { recordId:'unreported-wed', fields:{ [fields.date]:timestamp(addDays(monday,2)), [fields.host]:{text:'主播B'}, [fields.periods]:[{text:'下午'}], [fields.script]:[{type:'text',text:'脚本'}], [fields.count]:null } }
+  );
+  const data = await store.loadWeek(monday);
+  await assert.rejects(store.removeShoot(data.shoots.find(s => s.id === 'zero-count')), /不能取消/);
+  await assert.rejects(store.removeShoot(data.shoots.find(s => s.id === 'blank-row')), /尚未安排/);
+  sdk.base.getPermission = async ({param}) => param.fieldId !== fields.script;
+  await assert.rejects(store.removeShoot(data.shoots.find(s => s.id === 'unreported-wed')), /权限/);
+  assert.equal(sdk.fixture.writes.length, 0);
 });

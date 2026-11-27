@@ -1,4 +1,4 @@
-import { TARGET, addDays, mondayOf, dayName, timestamp, text, options, normalizeShoot, sortShoots, inWeek, leaveKey, validateShoot, assignmentProblems, changedKeys, sameValue } from './schedule-core.mjs?v=20261123-leaveweek';
+import { TARGET, addDays, mondayOf, dayName, timestamp, text, options, normalizeShoot, sortShoots, inWeek, leaveKey, validateShoot, assignmentProblems, changedKeys, sameValue, shouldKeepDateRow } from './schedule-core.mjs?v=20261127-delete-slot';
 
 export async function readPages(table, filter) {
   const rows = [];
@@ -79,12 +79,12 @@ export class ScheduleStore {
     return { monday, shoots, photographers, leaves, slotRecords };
   }
   async loadWeek(monday) {
-    const [data, canEdit, canAdd, canEditRoster, canEditLeave, canAddLeave] = await Promise.all([
+    const [data, canEdit, canAdd, canDelete, canEditRoster, canEditLeave, canAddLeave] = await Promise.all([
       this.loadWeekData(monday),
-      this.allowed('week', 'editable'), this.allowed('week', 'addable'),
+      this.allowed('week', 'editable'), this.allowed('week', 'addable'), this.allowed('week', 'deletable'),
       this.allowed('photo', 'editable'), this.allowed('slots', 'editable'), this.allowed('slots', 'addable')
     ]);
-    return { ...data, canEdit, canAdd, canEditRoster, canEditLeave, canAddLeave, hosts: this.selectOptions('host') };
+    return { ...data, canEdit, canAdd, canDelete, canEditRoster, canEditLeave, canAddLeave, hosts: this.selectOptions('host') };
   }
   selectOptions(key) { return (this.meta.week[TARGET.fields.week[key]].property?.options || []).map(o => ({ id: o.id, name: o.name })).filter(o => o.name); }
   encode(key, value) {
@@ -144,12 +144,36 @@ export class ScheduleStore {
     return id;
   }
   async removeShoot(shoot) {
-    if (shoot.count != null) throw new Error('已有实拍条数的记录请保留，不能取消整场拍摄');
-    await this.requirePermission('week', 'deletable', shoot.id);
+    if (!shoot?.host) throw new Error('该记录尚未安排拍摄场次');
+    if (shoot.count != null) throw new Error('已有实拍条数的记录请保留，不能取消或删除该场拍摄');
     const current = await this.getShoot(shoot.id);
-    if (current.count != null) throw new Error('这场拍摄已有人填报条数，不能取消');
+    if (!current.host) throw new Error('该拍摄场次已被清空，请刷新查看');
+    if (current.count != null) throw new Error('这场拍摄已有人填报条数，不能取消或删除');
     if (changedKeys(current, shoot).length) throw new Error('记录已更新，请重新打开后操作');
-    await this.tables.week.deleteRecord(shoot.id);
+    const weekShoots = await this.readShoots(mondayOf(current.date));
+    if (shouldKeepDateRow(current, weekShoots)) {
+      const clearKeys = ['host', 'periods', 'photographers', 'script'].filter(key =>
+        Array.isArray(current[key]) ? current[key].length : Boolean(current[key])
+      );
+      await this.requirePermission('week', 'editable', current.id);
+      for (const key of clearKeys) await this.requirePermission('week', 'editable', current.id, TARGET.fields.week[key]);
+      const fields = Object.fromEntries(clearKeys.map(key => [TARGET.fields.week[key], null]));
+      await this.tables.week.setRecord(current.id, { fields });
+      try {
+        const cleared = await this.getShoot(current.id);
+        if (cleared.date !== current.date || cleared.host || cleared.periods.length || cleared.photographers.length || cleared.script || cleared.count != null) {
+          throw new Error('readback mismatch');
+        }
+      } catch {
+        const error = new Error('删除结果尚未确认，请刷新核对该记录');
+        error.recordId = current.id;
+        throw error;
+      }
+      return { mode: 'cleared', id: current.id };
+    }
+    await this.requirePermission('week', 'deletable', current.id);
+    await this.tables.week.deleteRecord(current.id);
+    return { mode: 'deleted', id: current.id };
   }
   async setDuty(id, checked) {
     const fieldId = TARGET.fields.photo.onDuty;

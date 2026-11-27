@@ -1,11 +1,11 @@
-import { TARGET, PERIODS, addDays, dateKey, mondayOf, weekLabel, dayName, summarize, participantsTotal, occupied, halfDayCount, leaveKey, sortShoots, scriptUrl } from './schedule-core.mjs?v=20261123-leaveweek';
-import { ScheduleStore } from './schedule-data.mjs?v=20261124-refresh';
+import { TARGET, PERIODS, addDays, dateKey, mondayOf, weekLabel, dayName, summarize, participantsTotal, occupied, halfDayCount, leaveKey, sortShoots, scriptUrl, shouldKeepDateRow } from './schedule-core.mjs?v=20261127-delete-slot';
+import { ScheduleStore } from './schedule-data.mjs?v=20261127-delete-slot';
 import { createRefreshQueue } from './schedule-refresh.mjs?v=20261124-refresh';
 
 const $ = id => document.getElementById(id);
 const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]));
 const preview = ['localhost', '127.0.0.1'].includes(location.hostname) && new URLSearchParams(location.search).has('preview');
-let store, sdk, data, monday = mondayOf(), baseline, slot, loading = 0, unsubscribe;
+let store, sdk, data, monday = mondayOf(), baseline, slot, pendingDelete, loading = 0, unsubscribe;
 let saving = false, uncertain = false;
 let selectedPhotographer = '', noticeTimer;
 const refreshQueue = createRefreshQueue(readWeek, () => saving);
@@ -24,7 +24,7 @@ function focusedControl() {
   const element = document.activeElement;
   if (!$('roster-panel').contains(element) && !$('shoot-panel').contains(element)) return '';
   if (element.dataset.slotName) return ['name', 'date', 'period'].map(key => `[data-slot-${key}="${CSS.escape(element.dataset['slot' + key[0].toUpperCase() + key.slice(1)])}"]`).join('');
-  for (const key of ['photographer', 'duty', 'shoot', 'newShoot']) if (element.dataset[key]) return `[data-${key.replace(/[A-Z]/g, c => '-' + c.toLowerCase())}="${CSS.escape(element.dataset[key])}"]`;
+  for (const key of ['photographer', 'duty', 'shoot', 'deleteShoot', 'newShoot']) if (element.dataset[key]) return `[data-${key.replace(/[A-Z]/g, c => '-' + c.toLowerCase())}="${CSS.escape(element.dataset[key])}"]`;
   return '';
 }
 function restoreFocus(selector) {
@@ -35,6 +35,10 @@ function restoreFocus(selector) {
   }
 }
 const copy = object => structuredClone(object);
+function canRemoveShoot(shoot) {
+  if (!data || !shoot?.id || !shoot.host || shoot.count != null) return false;
+  return shouldKeepDateRow(shoot, data.shoots) ? data.canEdit : data.canDelete;
+}
 
 function render() {
   const focused = focusedControl(), totals = summarize(data.shoots);
@@ -60,7 +64,10 @@ function renderShoots() {
     return `<section class="day-group${date === today ? ' today' : ''}" aria-labelledby="day-${date}"><header class="day-heading"><div class="day-title"><h3 id="day-${date}">${dayName(date)}<span class="day-date">${date.slice(5).replace('-', '/')}</span></h3>${date === today ? '<span class="today-tag">今天</span>' : ''}<span class="day-count">${shoots.filter(s => s.host).length}场</span></div>${data.canAdd ? `<button type="button" class="add-shoot" data-new-shoot="${date}" aria-label="${date} ${dayName(date)}新增拍摄"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>新增拍摄</button>` : ''}</header>${shoots.map(s => {
       const url = scriptUrl(s.script);
       const script = url ? `<a href="${esc(url)}" target="_blank" rel="noopener noreferrer" title="${esc(s.script)}">查看脚本 ↗</a>` : `<span title="${esc(s.script)}">${esc(s.script || '待提供')}</span>`;
-      return `<article class="shoot-row"><button class="host-button" data-shoot="${esc(s.id)}" aria-label="${esc(date)} ${esc(s.host || '填写排期')}">${esc(s.host || '填写排期')}</button><span class="period-cell"><span class="period-tag">${esc(s.periods.join('、') || '待选时段')}</span></span><span class="photos"><span class="mobile-label">摄影师</span>${s.photographers.length ? s.photographers.map(name => `<span class="person-chip">${esc(name)}</span>`).join('') : '<span class="muted">待安排</span>'}</span><span class="script-cell"><span class="mobile-label">脚本</span>${script}</span><span class="count"><span class="mobile-label">实拍</span>${s.count == null ? '<span class="pending-badge">待填条数</span>' : `${s.count}条`}</span><span class="row-action"><button data-shoot="${esc(s.id)}" aria-label="${data.canEdit ? '编辑' : '查看'}${esc(s.host || '待安排')}${esc(date)}拍摄"><span aria-hidden="true">›</span></button></span></article>`;
+      const deleteButton = canRemoveShoot(s)
+        ? `<button type="button" class="row-delete" data-delete-shoot="${esc(s.id)}" aria-label="删除${esc(s.host)}${esc(date)}拍摄" title="删除该场次"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2m2 0v14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2V6h12Z"/><path d="M10 11v6M14 11v6"/></svg></button>`
+        : '';
+      return `<article class="shoot-row"><button type="button" class="host-button" data-shoot="${esc(s.id)}" aria-label="${esc(date)} ${esc(s.host || '填写排期')}">${esc(s.host || '填写排期')}</button><span class="period-cell"><span class="period-tag">${esc(s.periods.join('、') || '待选时段')}</span></span><span class="photos"><span class="mobile-label">摄影师</span>${s.photographers.length ? s.photographers.map(name => `<span class="person-chip">${esc(name)}</span>`).join('') : '<span class="muted">待安排</span>'}</span><span class="script-cell"><span class="mobile-label">脚本</span>${script}</span><span class="count"><span class="mobile-label">实拍</span>${s.count == null ? '<span class="pending-badge">待填条数</span>' : `${s.count}条`}</span><span class="row-action">${deleteButton}<button type="button" data-shoot="${esc(s.id)}" aria-label="${data.canEdit ? '编辑' : '查看'}${esc(s.host || '待安排')}${esc(date)}拍摄"><span aria-hidden="true">›</span></button></span></article>`;
     }).join('') || '<p class="day-empty">当天暂无拍摄安排</p>'}</section>`;
   }).join('');
 }
@@ -131,9 +138,32 @@ function openEditor(shoot) {
   $('editor-subtitle').textContent = [`${draft.date.slice(5).replace('-', '/')} ${dayName(draft.date)}`, draft.periods.join('、')].filter(Boolean).join(' · ');
   for (const input of $('shoot-form').querySelectorAll('input,select,textarea')) input.disabled = !editable;
   $('save-shoot').hidden = !editable; $('save-shoot').disabled = false; buttonBusy($('save-shoot'), false, draft.id ? '保存修改' : '新增拍摄');
-  $('cancel-shoot').hidden = !editable || !shoot.host || shoot.count != null;
+  const isScheduled = Boolean(shoot.id && shoot.host);
+  const canDeleteNow = canRemoveShoot(shoot);
+  const hasDeletePerm = isScheduled && (shouldKeepDateRow(shoot, data.shoots) ? data.canEdit : data.canDelete);
+  const showLockedDelete = isScheduled && shoot.count != null && hasDeletePerm;
+  $('cancel-shoot').hidden = !canDeleteNow && !showLockedDelete;
+  $('cancel-shoot').disabled = !canDeleteNow;
+  $('cancel-shoot').title = showLockedDelete ? '已填报实拍条数的场次不可删除' : '删除该场次';
   $('open-base').hidden = preview || !shoot.id;
   showError('editor-error'); $('editor').showModal();
+}
+function openDeleteDialog(shoot, returnFocusSelector) {
+  if (!data || !shoot || saving || !canRemoveShoot(shoot)) return;
+  pendingDelete = copy(shoot);
+  const keepBlank = shouldKeepDateRow(shoot, data.shoots);
+  $('cancel-dialog').dataset.returnFocus = returnFocusSelector || `[data-shoot="${CSS.escape(shoot.id)}"]`;
+  $('cancel-context').textContent = [
+    `${shoot.date.slice(5).replace('-', '/')} ${dayName(shoot.date)}`,
+    shoot.periods.join('、') || '未选时段',
+    shoot.photographers.join('、') || '待安排摄影师'
+  ].join(' · ');
+  $('cancel-title').textContent = `删除「${shoot.host}」这场拍摄？`;
+  $('cancel-desc').textContent = keepBlank
+    ? '这是当天唯一场次。删除后将清空主播、时段、摄影师与脚本，释放参与摄影师档期，并在飞书表格中保留该日期的空档期。'
+    : '删除后将移除这条未填报拍摄记录，并释放全部参与摄影师的时段。';
+  showError('cancel-error');
+  $('cancel-dialog').showModal();
 }
 function draftFromForm() {
   return { id: baseline?.id || '', date: $('shoot-date').value, host: $('shoot-host').value,
@@ -206,20 +236,50 @@ document.addEventListener('click', e => {
   const person = e.target.closest('[data-photographer]'); if (person && data) { selectedPhotographer = person.dataset.photographer; renderRoster(); }
   const joining = e.target.closest('[data-join]'); if (joining) join(joining.dataset.join);
   const close = e.target.closest('[data-close]'); if (close && !saving) $(close.dataset.close).close();
+  const deleting = e.target.closest('[data-delete-shoot]');
+  if (deleting && data) {
+    const target = data.shoots.find(s => s.id === deleting.dataset.deleteShoot);
+    if (target) openDeleteDialog(target, `[data-delete-shoot="${CSS.escape(target.id)}"]`);
+    return;
+  }
   const shoot = e.target.closest('[data-shoot]'); if (shoot && data) openEditor(data.shoots.find(s => s.id === shoot.dataset.shoot));
   const cell = e.target.closest('[data-slot-name]'); if (cell && data) openSlot(cell.dataset.slotName, cell.dataset.slotDate, cell.dataset.slotPeriod);
 });
 $('editor').addEventListener('cancel', e => { if (saving) e.preventDefault(); });
 for (const id of ['editor', 'slot-dialog']) $(id).addEventListener('close', () => restoreFocus($(id).dataset.returnFocus));
 $('open-base').onclick = async () => { if (saving) return; try { await sdk.ui.showRecordDetailDialog({ tableId: TARGET.week, recordId: baseline.id }); } catch (e) { showError('editor-error', e.message); } };
-$('cancel-shoot').onclick = () => { if (!saving) $('cancel-dialog').showModal(); };
+$('cancel-shoot').onclick = () => { if (!saving && baseline) openDeleteDialog(baseline, '#cancel-shoot'); };
 $('cancel-dialog').addEventListener('cancel', e => { if (saving) e.preventDefault(); });
+$('cancel-dialog').addEventListener('close', () => {
+  pendingDelete = undefined;
+  const selector = $('cancel-dialog').dataset.returnFocus;
+  if ($('editor').open && selector === '#cancel-shoot') $('cancel-shoot').focus({ preventScroll:true });
+  else if (!$('editor').open) restoreFocus(selector);
+});
 $('cancel-form').onsubmit = async e => {
-  e.preventDefault(); if (saving) return; saving = true;
-  const button = $('cancel-form').querySelector('[type=submit]'); buttonBusy(button, true, '取消中…');
-  try { await store.removeShoot(baseline); $('cancel-dialog').close(); $('editor').close(); await refresh(); notice('已取消这场拍摄'); }
-  catch (error) { $('cancel-dialog').close(); showError('editor-error', error.message); }
-  finally { saving = false; refreshQueue.settled(); buttonBusy(button, false, '确认取消'); }
+  e.preventDefault(); if (saving || !pendingDelete) return; saving = true;
+  const target = pendingDelete;
+  const button = $('cancel-form').querySelector('[type=submit]'); buttonBusy(button, true, '删除中…'); showError('cancel-error');
+  try {
+    const result = await store.removeShoot(target);
+    pendingDelete = undefined;
+    $('cancel-dialog').close();
+    if ($('editor').open) $('editor').close();
+    await refresh();
+    notice(result?.mode === 'cleared' ? '已删除该场次，并保留当天空档期' : '已删除该场次');
+  } catch (error) {
+    if (error.recordId) {
+      pendingDelete = undefined;
+      $('cancel-dialog').close();
+      if ($('editor').open) $('editor').close();
+      await refresh();
+      showError('error', error.message);
+    } else {
+      showError('cancel-error', error.message);
+    }
+  } finally {
+    saving = false; refreshQueue.settled(); buttonBusy(button, false, '确认删除');
+  }
 };
 $('slot-dialog').addEventListener('cancel', e => { if (saving) e.preventDefault(); });
 $('slot-leave').onclick = async () => {

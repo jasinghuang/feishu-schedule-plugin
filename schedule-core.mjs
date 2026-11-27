@@ -46,6 +46,15 @@ export function weekLabel(monday) {
   return `${year}年第${Math.floor((elapsed + offset) / 7) + 1}周`;
 }
 export const dayName = date => DAY_NAMES[new Date(`${date}T12:00:00Z`).getUTCDay()];
+export function isWorkday(date) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date || '')) return false;
+  const day = new Date(`${date}T12:00:00Z`).getUTCDay();
+  return day >= 1 && day <= 5;
+}
+export function shouldKeepDateRow(shoot, shoots) {
+  if (!shoot?.date || !isWorkday(shoot.date)) return false;
+  return shoots.filter(s => s.date === shoot.date).length <= 1;
+}
 export function numberOrNull(value) {
   if (value == null || value === '') return null;
   const n = Number(text(value));

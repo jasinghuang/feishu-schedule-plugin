@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="only light">
   <title>拍摄排期 · v2</title>
-  <link rel="stylesheet" href="./schedule.css?v=20261124-wise-ink">
+  <link rel="stylesheet" href="./schedule.css?v=20261127-delete-slot">
 </head>
 <body>
   <main class="app">
@@ -33,14 +33,14 @@
         <fieldset><legend>时间段</legend><div id="period-choices" class="choices"></div></fieldset>
         <fieldset><legend>参与摄影师</legend><div id="photo-choices" class="choices"></div></fieldset>
         <label class="full">脚本<textarea id="shoot-script" rows="4" placeholder="粘贴脚本文档链接或脚本内容"></textarea></label>
-        <label>实拍条数<div class="number-input"><input id="shoot-count" aria-label="实拍条数" type="number" min="0" step="1" placeholder="待填写" aria-describedby="count-hint"><span aria-hidden="true">条</span></div><small id="count-hint" class="field-hint">未填报留空；实拍为零填 0</small></label>
+        <label>实拍条数<div class="number-input"><input id="shoot-count" aria-label="实拍条数" type="number" min="0" step="1" placeholder="待填写" aria-describedby="count-hint"><span aria-hidden="true">条</span></div><small id="count-hint" class="field-hint">未填报留空；实拍为零填 0（已填条数的场次不可删除）</small></label>
       </div>
       <div id="editor-error" class="form-error" role="alert" hidden></div>
-      <footer class="dialog-footer"><button id="cancel-shoot" type="button" class="quiet danger" hidden>取消整场拍摄</button><button id="open-base" type="button" class="quiet" hidden>在飞书中查看</button><span class="spacer"></span><button type="button" data-close="editor">关闭</button><button id="save-shoot" class="primary" type="submit">保存修改</button></footer>
+      <footer class="dialog-footer"><button id="cancel-shoot" type="button" class="danger-outline" hidden>删除该场次</button><button id="open-base" type="button" class="quiet" hidden>在飞书中查看</button><span class="spacer"></span><button type="button" data-close="editor">关闭</button><button id="save-shoot" class="primary" type="submit">保存修改</button></footer>
     </form>
   </dialog>
   <dialog id="slot-dialog" aria-labelledby="slot-title" aria-describedby="slot-context"><header class="dialog-header"><div><h2 id="slot-title">安排时段</h2><p id="slot-context" class="muted"></p></div><button data-close="slot-dialog" class="icon-button" aria-label="关闭时段设置">×</button></header><div class="slot-options"><h3 id="slot-existing-label">加入已有场次</h3><div id="slot-existing"></div><div class="leave-action"><button id="slot-leave">设为请假</button></div><p id="slot-error" class="form-error" role="alert" hidden></p></div></dialog>
-  <dialog id="cancel-dialog" aria-labelledby="cancel-title"><form id="cancel-form"><header class="dialog-header"><h2 id="cancel-title">取消这场拍摄？</h2></header><p>取消后会删除这条未填报拍摄记录，并释放全部参与摄影师的时段。</p><footer class="dialog-footer"><button type="button" data-close="cancel-dialog">保留拍摄</button><button type="submit" class="danger">确认取消</button></footer></form></dialog>
-  <script type="module" src="./schedule-app.mjs?v=20261124-daily-ui3"></script>
+  <dialog id="cancel-dialog" aria-labelledby="cancel-title" aria-describedby="cancel-desc"><form id="cancel-form"><header class="dialog-header"><div><p id="cancel-context" class="muted"></p><h2 id="cancel-title">删除这场拍摄？</h2></div><button type="button" data-close="cancel-dialog" class="icon-button" aria-label="关闭删除确认">×</button></header><p id="cancel-desc" class="dialog-copy">删除后会释放全部参与摄影师的时段。</p><div id="cancel-error" class="form-error" role="alert" hidden></div><footer class="dialog-footer"><span class="spacer"></span><button type="button" data-close="cancel-dialog">保留拍摄</button><button type="submit" class="danger-solid">确认删除</button></footer></form></dialog>
+  <script type="module" src="./schedule-app.mjs?v=20261127-delete-slot"></script>
 </body>
 </html>
